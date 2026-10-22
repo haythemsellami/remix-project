@@ -2,7 +2,7 @@
 
 This experimental integration executes contracts through the prebuilt `monad-revmjs` WebAssembly package, inside Remix's existing VM Web Worker. The package owns execution and state; the TypeScript provider adapts results to Remix's transaction, account and debugger interfaces.
 
-The Rust wrapper, its native tests, bindings and package build live in `category-labs/monad-revm`, in `crates/monad-revmjs`, based on **main** ([engine package PR](https://github.com/category-labs/monad-revm/pull/76)). Remix pins a complete commit from that repository's `monad-revmjs-preview` distribution branch in `package.json` and `yarn.lock`. The distribution contains a ready-to-use npm package; its `build-info.json` records the source commit and build inputs. This preview can later be replaced by an exact npm registry version without changing the provider API.
+The Rust wrapper, its native tests, bindings and package build live on `category-labs/monad-revm`'s **main** branch in [`crates/monad-revmjs`](https://github.com/category-labs/monad-revm/tree/main/crates/monad-revmjs). Remix pins a complete commit from that repository's `monad-revmjs-preview` distribution branch in `package.json` and `yarn.lock`. The distribution contains a ready-to-use npm package; its `build-info.json` records the source commit and build inputs. This preview can later be replaced by an exact npm registry version without changing the provider API.
 
 ## Build and test
 
