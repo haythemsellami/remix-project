@@ -27,6 +27,8 @@
   },
   "scripts": {
     "nx": "nx",
+    "build:monad": "node scripts/build-monad.mjs",
+    "test:monad": "node scripts/test-monad.mjs",
     "start": "nx start",
     "serve": "node --max-old-space-size=8192 ./node_modules/.bin/nx serve remix-ide --configuration=development --memoryLimit=6144",
     "serve:hot": "node --max-old-space-size=8192 ./node_modules/.bin/nx serve remix-ide --configuration=hot",

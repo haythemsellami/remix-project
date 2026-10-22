@@ -1,0 +1,25 @@
+[package]
+name = "remix-monad-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.91"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# This revision belongs to monad-revm main. Advance it with the browser fixtures.
+monad-revm = { git = "https://github.com/category-labs/monad-revm", rev = "eee0ba8ddb7c5f432d8cfb999d558502a7ae491c", default-features = false, features = ["memory_limit", "optional_no_base_fee"] }
+revm = { version = "=43.0.3", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "=0.2.128"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
