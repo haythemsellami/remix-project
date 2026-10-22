@@ -1,4 +1,5 @@
 import { getAddress, getBytes, keccak256, toQuantity, toUtf8Bytes, Transaction, Wallet, ZeroAddress, ZeroHash } from 'ethers'
+import type { ExecuteRequest } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
 
@@ -54,7 +55,7 @@ export class MonadProvider {
 
   async init() {
     if (!this.engine) {
-      const wasm = await import('../pkg/remix_monad_wasm')
+      const wasm = await import('monad-revmjs')
       await wasm.default()
       this.engine = new wasm.Engine(this.options.fork, CHAIN_ID)
     }
@@ -164,7 +165,11 @@ export class MonadProvider {
 
   private run(tx: ReturnType<MonadProvider['normalize']>, commit: boolean, trace: boolean, blockNumber: number, timestamp: number): EngineResult {
     const { type, ...request } = tx
-    return JSON.parse(this.engine.execute(JSON.stringify({ ...request, blockNumber, timestamp, commit, trace })))
+    const execution: ExecuteRequest = {
+      ...request, blockNumber, timestamp, commit, trace,
+      blockGasLimit: GAS_LIMIT, baseFee: '0x0', beneficiary: ZeroAddress, prevrandao: ZeroHash
+    }
+    return JSON.parse(this.engine.execute(JSON.stringify(execution)))
   }
 
   private async execute(input: any, commit: boolean, signed?: Transaction) {

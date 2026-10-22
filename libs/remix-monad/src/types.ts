@@ -1,34 +1,7 @@
-export type MonadSpec = 'monad-ten' | 'monad-next'
+import type { Engine } from 'monad-revmjs'
 
-export interface MonadEngine {
-  fund(address: string, balance: string): void
-  account(address: string): string
-  execute(request: string): string
-  snapshot(): string
-  restore(snapshot: string): void
-  set_block_hash(number: number, hash: string): void
-  free(): void
-}
-
-export interface AccountState {
-  balance: string
-  nonce: number
-  code: string
-  storage: Record<string, string>
-}
-
-export interface EngineResult {
-  success: boolean
-  error: string | null
-  returnValue: string
-  createdAddress: string | null
-  gasUsed: number
-  gasSpent: number
-  logs: { address: string, topics: string[], data: string }[]
-  structLogs: { pc: number, op: string, gas: number, gasCost: number, depth: number, stack: string[], memory: string, error?: string }[]
-  preimages: Record<string, string>
-  traceTruncated: boolean
-}
+export type { MonadSpec, AccountState, ExecutionResult as EngineResult } from 'monad-revmjs'
+export type MonadEngine = Pick<Engine, 'fund' | 'account' | 'execute' | 'snapshot' | 'restore' | 'set_block_hash' | 'free'>
 
 export interface RpcRequest {
   method: string

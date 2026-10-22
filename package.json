@@ -27,7 +27,6 @@
   },
   "scripts": {
     "nx": "nx",
-    "build:monad": "node scripts/build-monad.mjs",
     "test:monad": "node scripts/test-monad.mjs",
     "start": "nx start",
     "serve": "node --max-old-space-size=8192 ./node_modules/.bin/nx serve remix-ide --configuration=development --memoryLimit=6144",
@@ -229,6 +228,7 @@
     "latest-version": "^5.1.0",
     "lunr": "^2.3.9",
     "merge": "^2.1.1",
+    "monad-revmjs": "https://github.com/category-labs/monad-revm.git#c614cf4cb735c294185a1419cf9db5f8c4d1fce6",
     "npm-install-version": "^6.0.2",
     "octokit": "^5.0.5",
     "path-browserify": "^1.0.1",

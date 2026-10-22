@@ -3,10 +3,9 @@
   "sourceRoot": "libs/remix-monad/src",
   "projectType": "library",
   "targets": {
-    "build": {
+    "test": {
       "executor": "nx:run-commands",
-      "outputs": ["{projectRoot}/pkg"],
-      "options": { "command": "node scripts/build-monad.mjs" }
+      "options": { "command": "node scripts/test-monad.mjs" }
     }
   },
   "tags": []

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, ContractFactory, getBytes, hexlify, Wallet, ZeroHash } from 'ethers'
-import init, { Engine } from '../pkg/remix_monad_wasm'
+import init, { Engine } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise debugger internals without exposing them as production package exports. */
 import { extendProvider } from '../../remix-debug/src/init'
@@ -13,7 +13,7 @@ import { atIndex } from '../../remix-debug/src/source/sourceMappingDecoder'
 import { getOpcodeInfo, updateSymbolicStack } from '../../remix-debug/src/solidity-decoder/opcodeStackHandler'
 /* eslint-enable @nrwl/nx/enforce-module-boundaries */
 
-await init({ module_or_path: readFileSync('libs/remix-monad/pkg/remix_monad_wasm_bg.wasm') })
+await init({ module_or_path: readFileSync(new URL(import.meta.resolve('monad-revmjs/wasm'))) })
 const source = readFileSync('libs/remix-monad/examples/MonadDemo.sol', 'utf8')
 const compiled = JSON.parse(solc.compile(JSON.stringify({
   language: 'Solidity', sources: { 'MonadDemo.sol': { content: source } },

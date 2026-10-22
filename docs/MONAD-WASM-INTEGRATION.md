@@ -15,7 +15,7 @@ The baseline reviewed on 21 October 2026 is:
 | `category-labs/monad-revm` | `main` | `eee0ba8ddb7c5f432d8cfb999d558502a7ae491c` |
 | `remix-project-org/remix-project` | `master` | `2f321f833a` |
 
-The separate `remix-ide` repository holds user documentation. Implementation changes belong in `remix-project`. The first wrapper lives at `libs/remix-monad/wasm` and depends on the pinned engine revision, leaving the `monad-revm` main checkout unchanged.
+The separate `remix-ide` repository holds user documentation. The provider, environment and debugger integration belong in `remix-project`. The reusable Rust/WASM wrapper lives in `monad-revm` at `crates/monad-revmjs`, based on `main`, and is distributed as the `monad-revmjs` npm package. Remix pins a prebuilt package commit during preview development; it does not compile Rust as part of its build.
 
 This Monad baseline already includes MIP-7 and MIP-18 under `MonadNext`. `MonadTen` remains the default, and `MonadNext` has no scheduled activation. Keep the selected execution specification explicit and distinguish experimental behavior in the environment selector.
 
@@ -43,7 +43,7 @@ flowchart LR
 
 In the existing local VM, `@ethereumjs/evm` executes instructions, `@ethereumjs/vm` handles transaction and block execution, and supporting packages provide state, transaction types, and hardfork configuration. Remix adds its provider, accounts, history, debugger integration, and persistence.
 
-The proposed browser package contains a WASM binary, JavaScript loading and binding code, and TypeScript declarations. `wasm-bindgen` can generate much of the language bridge. The wrapper must still define a stable API and map execution results into useful types. A package tool such as `wasm-pack` can assist with building and packaging; it does not implement the provider or debugger.
+The `monad-revmjs` browser package contains a WASM binary, JavaScript loading and binding code, and TypeScript declarations. `wasm-bindgen` generates the language bridge; the wrapper defines the execution API and maps results into useful types. Its build and packed-installation tests belong to the engine repository. The distribution has no install scripts or runtime package dependencies, so Remix contributors need only the normal JavaScript toolchain.
 
 Use `wasm32-unknown-unknown` for the browser target. The successful feasibility build uses the library's existing `no_std` configuration and pure Rust crypto backends. `no_std` avoids depending on the usual Rust standard library; allocation through `alloc` remains available. It is a useful dependency configuration here, not a universal requirement for compiling Rust to WASM.
 
@@ -171,7 +171,7 @@ Completion criteria: selected historical transactions match a trusted reference 
 
 ## Validation and delivery sequence
 
-The first local slice is implemented in [remix-monad](../libs/remix-monad/README.md): a Rust/WASM package, Monad Ten and experimental Monad Next environments, local provider state, and debugger support for `CALLSTACKDEPTH` and `CALLERN`. [MonadDemo.sol](../libs/remix-monad/examples/MonadDemo.sol) exercises ordinary Solidity deployment and storage, then a nested raw-bytecode extension call. Native and WASM integration tests cover this path; broader conformance, development-tool routing and remote forking remain follow-up work. This does not complete every criterion in Areas 1–4.
+The first local slice is implemented in [remix-monad](../libs/remix-monad/README.md), consuming `monad-revmjs`: Monad Ten and experimental Monad Next environments, local provider state, and debugger support for `CALLSTACKDEPTH` and `CALLERN`. [MonadDemo.sol](../libs/remix-monad/examples/MonadDemo.sol) exercises ordinary Solidity deployment and storage, then a nested raw-bytecode extension call. Native and packed-package tests run in the engine repository; provider/debugger integration tests run here against the installed package. Broader conformance, development-tool routing and remote forking remain follow-up work. This does not complete every criterion in Areas 1–4.
 
 A standalone feasibility probe built from the `main` revision above passed 22 checks in Node and in a browser Web Worker: 11 scenarios, each with and without inspection. Scenarios covered ordinary execution, contract creation, storage writes and rollback, MIP-18 at root and nested call depth, hardfork gating, and KZG/SHA256 precompiles. The probe checked results and selected inspection behavior; it did not validate Remix's complete trace format.
 

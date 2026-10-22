@@ -1,32 +1,27 @@
 # Local Monad VM for Remix
 
-This experimental integration executes contracts in `monad-revm` compiled to WebAssembly, inside Remix's existing VM Web Worker. The Rust wrapper owns execution and state; the TypeScript provider adapts results to Remix's transaction, account and debugger interfaces.
+This experimental integration executes contracts through the prebuilt `monad-revmjs` WebAssembly package, inside Remix's existing VM Web Worker. The package owns execution and state; the TypeScript provider adapts results to Remix's transaction, account and debugger interfaces.
 
-The engine is pinned to commit `eee0ba8ddb7c5f432d8cfb999d558502a7ae491c` from `category-labs/monad-revm` **main**. Keep the engine checkout on `main` and update the pinned revision deliberately with regression checks. The wrapper lives here so integration work does not require modifications to the engine repository.
+The Rust wrapper, its native tests, bindings and package build live in `category-labs/monad-revm`, in `crates/monad-revmjs`, based on **main** ([engine package PR](https://github.com/category-labs/monad-revm/pull/76)). Remix pins a complete commit from that repository's `monad-revmjs-preview` distribution branch in `package.json` and `yarn.lock`. The distribution contains a ready-to-use npm package; its `build-info.json` records the source commit and build inputs. This preview can later be replaced by an exact npm registry version without changing the provider API.
 
 ## Build and test
 
-Use the repository's Node version and install its dependencies. Install the Rust toolchain, browser target and matching binding generator once:
+Use the repository's Node version and install its dependencies. Remix does not require Rust, Cargo or wasm-bindgen:
 
 ```sh
-rustup toolchain install 1.91
-rustup target add wasm32-unknown-unknown --toolchain 1.91
-cargo +1.91 install wasm-bindgen-cli --version 0.2.128 --locked
 yarn install --frozen-lockfile
 ```
 
 From the repository root:
 
 ```sh
-yarn build:monad
-cargo +1.91 test --manifest-path libs/remix-monad/wasm/Cargo.toml --locked
 yarn test:monad
 yarn nx serve remix-ide
 ```
 
-`build:monad` creates the ignored `pkg/` directory containing the WASM module, JavaScript loader and TypeScript declarations. The Nx dependency graph also builds this package when building or serving Remix. Commit the Rust lockfile; do not commit generated bindings or binaries. The WASM module is loaded on demand when a Monad environment is selected.
+The dependency supplies the WASM module, JavaScript loader and TypeScript declarations. The module is loaded on demand when a Monad environment is selected; the bundler emits its WASM asset. The provider uses the package's exported request and result types.
 
-On macOS, Rust linking requires a working Xcode Command Line Tools SDK. If the selected SDK has linker compatibility problems, select a compatible installed SDK through `SDKROOT` for the build commands.
+For engine changes, build and test `crates/monad-revmjs` in the engine repository, update the package pin, then rerun this integration's tests. Normal Remix builds consume the package without rebuilding it.
 
 ## Try the complete flow
 
@@ -47,11 +42,11 @@ The constructor deploys an eight-byte oracle with runtime `ae005f5260205ff3`. `A
 Remix deploy / call / debug
   -> existing worker message protocol
   -> MonadProvider (local JSON-RPC and history)
-  -> wasm-bindgen bindings
+  -> monad-revmjs package (JavaScript bindings and WASM)
   -> Engine (monad-revm, in-memory database and inspector)
 ```
 
-The Rust API provides account funding and reads, execution with or without commit, block hashes, and versioned snapshot export/import. Inputs use JSON with exact hex quantities for 256-bit values. The provider serializes requests so transactions cannot race over nonces or state.
+The package API provides account funding and reads, execution with or without commit, block hashes, and versioned snapshot export/import. Inputs use JSON with exact hex quantities for 256-bit values. Remix supplies the local block gas limit, base fee, beneficiary and prevrandao explicitly. The provider serializes requests so transactions cannot race over nonces or state.
 
 Execution returns status, return data, logs, created address, gas accounting and optional instruction traces. Traces contain the state **before** each instruction, real bytecode PCs, stack, memory, call depth, gas cost, and errors. Debugger changes preserve the two-byte extension encoding and its stack effects. Monad Ten and Next traces identify their specification explicitly.
 
@@ -63,7 +58,7 @@ State export contains the engine snapshot, local development keys, blocks, recei
 
 ## Current coverage and limits
 
-Native Rust tests cover deployment, simulation, committed and reverted storage, full-limit charging, snapshot restore, hardfork gating, both extension instructions and SHA256. The WASM integration tests compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.
+Native Rust and packed-installation tests live with `monad-revmjs`. This repository's WASM integration tests consume the installed package, compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.
 
 This is the first local execution and debugging slice. Remaining work includes:
 
@@ -71,7 +66,7 @@ This is the first local execution and debugging slice. Remaining work includes:
 - Access-list, authorization and blob transaction workflows; Hardhat console decoding; routing Remix Solidity unit tests and the CLI to this backend.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
-- Broader precompile and nested-call conformance tests, cancellation, and package release CI.
+- Broader precompile and nested-call conformance tests, cancellation, and registry release automation. The engine repository's CI builds and tests the npm archive.
 
 Blocks and receipts are synthetic local records. State, transaction and receipt roots and blooms are placeholders; they are not cryptographic proofs or full-node RPC equivalents. Calls have separate synthetic records for debugging and do not alter canonical local blocks or committed state. Unsupported RPC methods return an explicit error.
 
