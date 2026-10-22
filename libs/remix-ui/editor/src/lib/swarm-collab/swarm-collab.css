@@ -1,0 +1,82 @@
+.swarm-collab-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+
+.swarm-collab-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--bs-secondary-color, #888);
+}
+
+.swarm-collab-dot-live {
+  background: var(--bs-success, #2e7d32);
+}
+
+.swarm-collab-panel {
+  width: 340px;
+}
+
+.swarm-collab-panel .card-body {
+  overflow-x: hidden;
+}
+
+.swarm-collab-invite-input {
+  min-width: 0;
+}
+
+.swarm-collab-close-sm {
+  font-size: 0.65em;
+}
+
+.swarm-collab-panel details {
+  max-width: 100%;
+}
+
+
+@keyframes swarm-collab-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+.swarm-collab-icon-connecting {
+  animation: swarm-collab-blink 1s ease-in-out infinite;
+}
+
+.swarm-collab-caret {
+  position: relative;
+  border-left: 2px solid var(--swarm-collab-color);
+  margin-left: -1px;
+}
+
+.swarm-collab-label-widget {
+  font-size: 0.7rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px 3px 3px 0;
+  background: var(--swarm-collab-color);
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.5;
+  margin-bottom: 2px;
+}
+
+.swarm-collab-selection {
+  background: var(--swarm-collab-color);
+  opacity: 0.25;
+}
+
+.swarm-collab-color-0 { --swarm-collab-color: #e53935; }
+.swarm-collab-color-1 { --swarm-collab-color: #1e88e5; }
+.swarm-collab-color-2 { --swarm-collab-color: #43a047; }
+.swarm-collab-color-3 { --swarm-collab-color: #fb8c00; }
+.swarm-collab-color-4 { --swarm-collab-color: #8e24aa; }
+.swarm-collab-color-5 { --swarm-collab-color: #00897b; }
