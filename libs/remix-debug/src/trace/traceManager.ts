@@ -44,7 +44,8 @@ export class TraceManager {
 
         try {
           const networkId = (await this.web3.getNetwork()).chainId
-          this.fork = execution.forkAt(networkId, tx.blockNumber)
+          this.fork = result.fork === 'monad-ten' || result.fork === 'monad-next'
+            ? result.fork : execution.forkAt(networkId, tx.blockNumber)
         } catch (e) {
           this.fork = 'osaka'
           console.log(`unable to detect fork, defaulting to ${this.fork}..`)
