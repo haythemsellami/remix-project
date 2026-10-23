@@ -150,6 +150,12 @@ test('Monad Ten rejects extension execution and has separate decoder behavior', 
   assert.equal(map[4], undefined)
   assert.notEqual(map[8], undefined, 'JUMPDEST remains addressable after an invalid extension prefix')
   assert.equal(parseCode(raw, 'monad-next')[2].name, 'CALLERN')
+  assert.deepEqual(parseCode(raw, 'monad-ten').map(opcode => opcode.name),
+    ['INVALID', 'STOP', 'PUSH0', 'INVALID', 'ADD', 'PUSH1', 'INVALID', 'JUMPDEST', 'STOP'])
+  const [tenNames, tenMap] = nameOpCodes(raw, 'monad-ten')
+  assert.match(tenNames[0], /INVALID/)
+  assert.notEqual(tenMap[1], undefined, 'Monad Ten does not consume an extension selector')
+  assert.notEqual(tenMap[4], undefined, 'Monad Ten decodes the CALLERN selector as a separate byte')
   assert.match(nameOpCodes(raw, 'osaka')[0][0], /INVALID/)
   assert.deepEqual(getOpcodeInfo('CALLSTACKDEPTH'), { name: 'CALLSTACKDEPTH', in: 0, out: 1 })
   assert.deepEqual(getOpcodeInfo('CALLERN'), { name: 'CALLERN', in: 1, out: 1 })
@@ -159,6 +165,40 @@ test('Monad Ten rejects extension execution and has separate decoder behavior', 
   assert.equal(stack.length, 1)
   stack = updateSymbolicStack(stack, 'PUSH0', 2)
   assert.equal(updateSymbolicStack(stack, 'MSTORE', 3).length, 0)
+})
+
+test('supported Monad forks use the Osaka opcode baseline in both decoders', () => {
+  const raw = getBytes('0x1e5f5500')
+  const expected = ['CLZ', 'PUSH0', 'SSTORE', 'STOP']
+  for (const hardfork of ['monad-ten', 'monad-next', 'osaka']) {
+    const [names] = nameOpCodes(raw, hardfork)
+    assert.deepEqual(names.map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
+    assert.deepEqual(parseCode(raw, hardfork).map(opcode => opcode.name), expected, hardfork)
+  }
+})
+
+test('Ethereum opcode availability follows the requested hardfork in both decoders', () => {
+  const raw = getBytes('0x1e5f5e00')
+  const cases = [
+    { hardfork: 'london', expected: ['INVALID', 'INVALID', 'INVALID', 'STOP']},
+    { hardfork: 'shanghai', expected: ['INVALID', 'PUSH0', 'INVALID', 'STOP']},
+    { hardfork: 'cancun', expected: ['INVALID', 'PUSH0', 'MCOPY', 'STOP']},
+    { hardfork: 'prague', expected: ['INVALID', 'PUSH0', 'MCOPY', 'STOP']}
+  ]
+  for (const { hardfork, expected } of cases) {
+    const [names] = nameOpCodes(raw, hardfork)
+    assert.deepEqual(names.map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
+    assert.deepEqual(parseCode(raw, hardfork).map(opcode => opcode.name), expected, hardfork)
+  }
+})
+
+test('unsupported hardfork names are rejected by both opcode decoders', () => {
+  const raw = getBytes('0x1e00')
+  for (const hardfork of ['monad-eight', 'monad-nine', 'monad-future', 'monad-next-typo', 'unknown']) {
+    for (const decode of [nameOpCodes, parseCode]) {
+      assert.throws(() => decode(raw, hardfork), /Hardfork with name .* not supported/, `${decode.name}: ${hardfork}`)
+    }
+  }
 })
 
 test('CALLERN, rollback, signed EIP-1559 transactions and request sequencing', async () => {

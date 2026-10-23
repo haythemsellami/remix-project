@@ -5,9 +5,22 @@ import { getOpcodesForHF, paramsEVM } from '@ethereumjs/evm'
 import getOpcodes from './opcodes'
 import { monadOpcodeAt } from './monadOpcodes'
 
+// monad-revm's MonadHardfork::into_eth_spec uses Osaka for MonadTen and MonadNext.
+// This selects standard debugger opcode metadata. The original Monad fork controls
+// extension decoding; execution and gas accounting remain in monad-revmjs.
+const MONAD_OPCODE_BASE_HARDFORKS = new Map([
+  ['monad-ten', 'osaka'],
+  ['monad-next', 'osaka']
+])
+
+function getOpcodeTable (hardfork: string) {
+  const opcodeBaseHardfork = MONAD_OPCODE_BASE_HARDFORKS.get(hardfork) ?? hardfork
+  const common = new Common({ chain: Mainnet, hardfork: opcodeBaseHardfork, params: paramsEVM })
+  return getOpcodesForHF(common).opcodes
+}
+
 export function nameOpCodes (raw, hardfork) {
-  const common = new Common({ chain: Mainnet, hardfork: hardfork?.startsWith('monad-') ? 'osaka' : hardfork, params: paramsEVM })
-  const opcodes = getOpcodesForHF(common).opcodes
+  const opcodes = getOpcodeTable(hardfork)
 
   let pushData = ''
   const codeMap = {}
@@ -51,8 +64,7 @@ type Opcode = {
  * information about the opcode.
  */
 export function parseCode (raw, hardfork = 'osaka') {
-  const common = new Common({ chain: Mainnet, hardfork: 'osaka', params: paramsEVM })
-  const opcodes = getOpcodesForHF(common).opcodes
+  const opcodes = getOpcodeTable(hardfork)
 
   const code = []
   for (let i = 0; i < raw.length; i++) {

@@ -50,6 +50,8 @@ The package API provides account funding and reads, execution with or without co
 
 Execution returns status, return data, logs, created address, gas accounting and optional instruction traces. Traces contain the state **before** each instruction, real bytecode PCs, stack, memory, call depth, gas cost, and errors. Debugger changes preserve the two-byte extension encoding and its stack effects. Monad Ten and Next traces identify their specification explicitly.
 
+Both debugger decoders explicitly map `monad-ten` and `monad-next` to EthereumJS's Osaka opcode baseline, matching `MonadHardfork::into_eth_spec` in `monad-revm`. The original Monad fork controls extension decoding; execution, gas accounting and state remain in Rust/WASM. Other fork names pass through EthereumJS validation, so unsupported Monad forks are rejected.
+
 This local chain has ID **1337**, five funded development accounts with **100 MON** each, a 30 million transaction gas cap and zero base fee. Transactions support legacy and EIP-1559 formats. These are local simulation settings, not public Monad network configuration.
 
 Monad charges the submitted transaction gas limit. Receipts use `tx_gas_used()`; consumption uses `total_gas_spent()`. Estimation searches for a successful gas limit without committing state. Gas-sensitive contracts can be non-monotonic, so estimation is not a guarantee that a different future state will execute identically.
