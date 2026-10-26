@@ -1533,14 +1533,12 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
     const node = historyRef.current
     if (!node || messages.length === 0) return
 
-    const isAtBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 100
     const userSentNewMessage = messages.length > lastMessageCountRef.current &&
                                 messages[messages.length - 1]?.role === 'user'
     // Auto-scroll conditions:
     // - User sent a new message (always scroll)
-    // - User hasn't manually scrolled up (userHasScrolledRef is false)
-    // - Currently streaming and user is near bottom
-    if (userSentNewMessage || !userHasScrolledRef.current || (isStreaming && isAtBottom)) {
+    // - User hasn't scrolled up (scrolling back to the bottom clears userHasScrolledRef)
+    if (userSentNewMessage || !userHasScrolledRef.current) {
       node.scrollTop = node.scrollHeight
       userHasScrolledRef.current = false
     }
@@ -3174,23 +3172,24 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
   )
   const chatHistoryRef = useRef<HTMLElement | null>(null)
 
-  // Detect manual user scrolling
+  // Detect manual user scrolling. The history list is re-mounted when AI mode,
   useEffect(() => {
-    const node = historyRef.current
-    if (!node) return
-
-    const handleScroll = () => {
-      const isAtBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 100
-
-      if (!isAtBottom) {
+    let lastScrollTop = 0
+    const handleScroll = (event: Event) => {
+      const node = historyRef.current
+      if (!node || event.target !== node) return
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
+      // Any upward move stops following the stream; reaching the bottom resumes it
+      if (node.scrollTop < lastScrollTop - 2 && distanceFromBottom > 8) {
         userHasScrolledRef.current = true
-      } else {
+      } else if (distanceFromBottom < 30) {
         userHasScrolledRef.current = false
       }
+      lastScrollTop = node.scrollTop
     }
 
-    node.addEventListener('scroll', handleScroll)
-    return () => node.removeEventListener('scroll', handleScroll)
+    document.addEventListener('scroll', handleScroll, true)
+    return () => document.removeEventListener('scroll', handleScroll, true)
   }, [])
 
   const maximizePanel = async () => {
