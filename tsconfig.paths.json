@@ -200,6 +200,9 @@
             "@remix/remix-ai-core/audit-taxonomy": [
               "libs/remix-ai-core/src/helpers/auditTaxonomy.ts"
             ],
+            "@remix/remix-ai-core/model-tiers": [
+              "libs/remix-ai-core/src/helpers/modelTiers.ts"
+            ],
             "@remix/remix-ai-core/quick-dapp-thegraph-prompts": [
               "libs/remix-ai-core/src/remix-mcp-server/prompts/quickDappTheGraphPrompts.ts"
             ],
@@ -265,6 +268,9 @@
             ],
             "@remix-ui/run-tab-transactions": [
               "libs/remix-ui/run-tab-transactions/src/index.ts"
+            ],
+            "@remix-ui/run-tab-eez": [
+              "libs/remix-ui/run-tab-eez/src/index.ts"
             ],
             "@remix-ui/thegraph": [
               "libs/remix-ui/thegraph/src/index.ts"

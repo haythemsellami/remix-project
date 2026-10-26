@@ -1,7 +1,7 @@
 import { ViewPlugin } from '@remixproject/engine-web'
 import React, { useState, useReducer, useEffect, useContext, useMemo } from 'react' // eslint-disable-line
 import Fuse from 'fuse.js'
-import { EtherscanConfigDescription, GitHubCredentialsDescription, SindriCredentialsDescription, TheGraphConfigDescription, ZkVerifyCredentialsDescription } from '@remix-ui/helper'
+import { EtherscanConfigDescription, GitHubCredentialsDescription, isEezEnabled, SindriCredentialsDescription, TheGraphConfigDescription, ZkVerifyCredentialsDescription } from '@remix-ui/helper'
 import { AppConfig, FeatureGroup } from '@remix-api'
 import { AppContext, useAuth } from '@remix-ui/app'
 
@@ -11,7 +11,7 @@ import { ThemeModule } from '@remix-ui/theme-module'
 import { ThemeContext, themes } from '@remix-ui/home-tab'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Registry, QueryParams } from '@remix-project/remix-lib'
-import { SettingsSectionUI } from './settings-section'
+import { SettingsSectionUI, subSectionAnchorId } from './settings-section'
 import { SettingsSection } from '../types'
 import './remix-ui-settings.css'
 
@@ -185,6 +185,20 @@ const settingsSections: SettingsSection[] = [
         ]
       },
       {
+        title: 'settings.aiScreenCaptureSection',
+        options: [{
+          name: 'ai-screen-capture-consent',
+          label: 'settings.aiScreenCapture',
+          description: 'settings.aiScreenCaptureDescription',
+          type: 'select',
+          selectOptions: [
+            { label: 'Ask the first time in each chat', value: 'ask' },
+            { label: 'Always allow', value: 'always' },
+            { label: 'Never allow', value: 'never' }
+          ]
+        }]
+      },
+      {
         title: 'settings.aiFeedbackSection',
         options: [{
           name: 'ai-feedback',
@@ -222,9 +236,14 @@ const settingsSections: SettingsSection[] = [
         title: 'settings.deepAgentApiKeysSection',
         options: [{
           name: 'deepagent-api-keys-config' as keyof typeof initialState,
-          label: 'settings.useOwnApiKeys',
+          // No label and no enable switch: the subsection heading already reads
+          // "Bring Your Own API Keys", and filling in a key is itself the act
+          // of opting in — the toggle was a redundant second step.
+          // `deepagent-api-keys-config` remains the stored flag, now derived
+          // from whether a key is present (see settingsReducer).
           description: 'settings.useOwnApiKeysDescription',
-          type: 'toggle' as const,
+          type: 'custom' as const,
+          alwaysShowSubOptions: true,
           toggleUIOptions: [{
             name: 'deepagent-openrouter-api-key' as keyof typeof initialState,
             type: 'password'
@@ -329,6 +348,19 @@ const settingsSections: SettingsSection[] = [
           }]
         }]
       }]
+  },
+  {
+    key: 'eez', label: 'settings.eez', description: 'settings.eezDescription', subSections: [
+      {
+        title: 'settings.eezNetworksSection',
+        options: [{
+          name: 'eez-networks-config',
+          label: '',
+          type: 'custom' as const,
+          customComponent: 'eezNetworksConfig'
+        }]
+      }
+    ]
   }
 ]
 
@@ -397,6 +429,9 @@ export const RemixUiSettings = (props: RemixUiSettingsProps) => {
     return settingsSections
       .filter(section => {
         if (section.key === 'account' && config['settings.account_management'] === false) {
+          return false
+        }
+        if (section.key === 'eez' && !isEezEnabled()) {
           return false
         }
         return true
@@ -472,20 +507,48 @@ export const RemixUiSettings = (props: RemixUiSettingsProps) => {
       dispatch({ type: 'SET_VALUE', payload: { name: 'matomo-perf-analytics', value: isChecked } })
     })
 
-    // Listen for plugin event to open a specific settings section
-    const onOpenSection = ({ sectionKey }: { sectionKey: string }) => {
+    const onOpenSection = ({ sectionKey, subSectionTitle }: { sectionKey: string, subSectionTitle?: string }) => {
       // Validate section key exists; fallback to 'general'
       const keys = settingsSections.map(s => s.key)
-      const target = keys.includes(sectionKey) ? sectionKey : 'general'
+      const isHidden = sectionKey === 'eez' && !isEezEnabled()
+      const target = keys.includes(sectionKey) && !isHidden ? sectionKey : 'general'
       setSelected(target)
       const section = settingsSections.find(s => s.key === target)
       if (section) setFilteredSection(section)
+      if (!subSectionTitle) return
+
+      const anchorId = subSectionAnchorId(subSectionTitle)
+      let attempts = 0
+      const scrollToAnchor = () => {
+        const el = document.getElementById(anchorId)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          // Brief flash so the eye lands on the right block after the scroll.
+          el.classList.add('remix-settings-anchor-flash')
+          setTimeout(() => el.classList.remove('remix-settings-anchor-flash'), 1600)
+          return
+        }
+        if (++attempts < 40) setTimeout(scrollToAnchor, 50)
+      }
+      setTimeout(scrollToAnchor, 0)
     }
 
     props.plugin.on('settings', 'openSection', onOpenSection)
 
+    // The assistant's consent card writes "Always allow" straight to config
+    const onConfigChanged = ({ key, content }: { key: string, content: any }) => {
+      if (key === 'settings/ai-screen-capture-consent') {
+        dispatch({ type: 'SYNC_VALUE', payload: { name: 'ai-screen-capture-consent', value: content } })
+      }
+    }
+    props.plugin.on('settings', 'configChanged', onConfigChanged)
+    // initialState is read once at load, which may predate a choice made in the chat
+    const currentScreenCapture = props.config?.get('settings/ai-screen-capture-consent')
+    if (currentScreenCapture) dispatch({ type: 'SYNC_VALUE', payload: { name: 'ai-screen-capture-consent', value: currentScreenCapture } })
+
     return () => {
       try {
+        props.plugin.off('settings', 'configChanged')
         props.plugin.off('settings', 'openSection')
       } catch (e) {
         console.log(e)

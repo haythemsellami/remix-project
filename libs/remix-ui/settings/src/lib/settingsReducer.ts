@@ -44,6 +44,7 @@ let displayErrors = config.get('settings/display-errors')
 let saveEvmState = config.get('settings/save-evm-state')
 let aiFeedback = config.get('settings/ai-feedback')
 let aiFeedbackCreditThreshold = config.get('settings/ai-feedback-credit-threshold')
+let aiScreenCaptureConsent = config.get('settings/ai-screen-capture-consent')
 
 if (!githubConfig && (githubUserName || githubEmail || gistAccessToken)) {
   config.set('settings/github-config', true)
@@ -114,6 +115,12 @@ if (aiFeedbackCreditThreshold == null || aiFeedbackCreditThreshold === undefined
   config.set('settings/ai-feedback-credit-threshold', 12000)
   aiFeedbackCreditThreshold = 12000
 }
+// Asking is the only safe default: the assistant must not be able to
+// photograph a screen nobody has agreed to share.
+if (aiScreenCaptureConsent !== 'ask' && aiScreenCaptureConsent !== 'always' && aiScreenCaptureConsent !== 'never') {
+  config.set('settings/ai-screen-capture-consent', 'ask')
+  aiScreenCaptureConsent = 'ask'
+}
 
 let enableCodeAnalysisPopoverBoolean = enableCodeAnalysisPopover
 if (typeof enableCodeAnalysisPopoverBoolean !== 'boolean') {
@@ -155,7 +162,7 @@ export const initialState: SettingsState = {
     isLoading: false
   },
   'copilot/suggest/activate': {
-    value: config.get('settings/copilot/suggest/activate') || true,
+    value: config.get('settings/copilot/suggest/activate') ?? true,
     isLoading: false
   },
   'save-evm-state': {
@@ -316,8 +323,16 @@ export const initialState: SettingsState = {
     value: aiFeedback,
     isLoading: false
   },
+  'ai-screen-capture-consent': {
+    value: aiScreenCaptureConsent,
+    isLoading: false
+  },
   'ai-feedback-credit-threshold': {
     value: aiFeedbackCreditThreshold,
+    isLoading: false
+  },
+  'eez-networks-config': {
+    value: false,
     isLoading: false
   },
   toaster: {
@@ -340,6 +355,15 @@ export const settingReducer = (state: SettingsState, action: SettingsActions): S
     //   }
     // }
 
+    // The BYOK section has no enable switch any more
+    if (action.payload.name === 'deepagent-openrouter-api-key' ||
+        action.payload.name === 'deepagent-bedrock-bearer-token') {
+      const other = action.payload.name === 'deepagent-openrouter-api-key'
+        ? config.get('settings/deepagent-bedrock-bearer-token')
+        : config.get('settings/deepagent-openrouter-api-key')
+      config.set('settings/deepagent-api-keys-config', !!(action.payload.value || other))
+    }
+
     // Reinitialize DeepAgent when API key settings change
     if (action.payload.name === 'deepagent-api-keys-config' ||
         action.payload.name === 'deepagent-openrouter-api-key' ||
@@ -351,6 +375,9 @@ export const settingReducer = (state: SettingsState, action: SettingsActions): S
       }
     }
 
+    return { ...state, [action.payload.name]: { ...(state as any)[action.payload.name], value: action.payload.value, isLoading: false } }
+  // A value already written to config elsewhere — reflect it without writing it back
+  case 'SYNC_VALUE':
     return { ...state, [action.payload.name]: { ...(state as any)[action.payload.name], value: action.payload.value, isLoading: false } }
   case 'SET_LOADING':
     return { ...state, [action.payload.name]: { ...(state as any)[action.payload.name], isLoading: true } }

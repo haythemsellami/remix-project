@@ -6,9 +6,12 @@ import { remixAILogger } from '../../helpers/logger'
 
 import { createDeepAgent, createPatchToolCallsMiddleware, CreateDeepAgentParams } from 'deepagents'
 import { ICompletions, IGeneration, IParams } from '../../types/types'
+import { AIModel, modelSupportsVision } from '../../types/models'
+import { lookupCatalogEntry } from './modelParams'
 import { Plugin } from '@remixproject/engine'
 import EventEmitter from 'events'
 import { RemixFilesystemBackend } from './RemixFilesystemBackend'
+import { generativeUiGuard } from './generativeUiGuard'
 import { createRemixTools, ToolApprovalGate } from './tools'
 import {
   REMIX_DEEPAGENT_SYSTEM_PROMPT,
@@ -24,16 +27,20 @@ import { ToolRegistry } from '../../remix-mcp-server/types/mcpTools'
 import { classifyApiError, getErrorMessage } from './ApiErrorHandler'
 import { aiErrorFromException } from '../../state/ai-error'
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from '@langchain/core/messages'
-import type { DynamicStructuredTool } from '@langchain/core/tools'
+import { tool, type DynamicStructuredTool } from '@langchain/core/tools'
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { IndexedDBCheckpointSaver } from '../../storage/IndexedDBCheckpointSaver'
 import type { DeepAgent } from 'deepagents'
 import { RemixDeepAgentMiddleware } from './deepAgentMiddleWare'
+import { RemixVisionMiddleware } from './visionMiddleware'
+import { screenshotBuffer } from './visionBuffer'
+import { screenshotConsent } from './screenshotConsent'
 
 import './AsyncLocalStorageInit'
 import { createModelInstance } from './ModelFactory'
 import { syncModelCatalog } from './helpers/modelCatalog'
-import type { z } from 'zod'
+import { z } from 'zod'
+import { buildUserContent, contentToText } from '../../helpers/multimodal'
 import { generateStructured, StructuredOutputOptions } from '../../helpers/structuredOutput'
 import { SecurityCheckSchema, GeneratedProjectSchema, WorkspaceEditSchema } from '../../types/schemas'
 import { getLangfuseCallbackHandler, flushLangfuse } from '../../helpers/langfuse'
@@ -46,8 +53,8 @@ import { InactivityTimeoutManager } from './InactivityTimeoutManager'
 import { CONVERSATION_THREAD_PREFIX, DAPP_MAX_TOKENS } from '@remix/remix-ai-core'
 import { Features } from '@remix-api'
 import { flattenJSON, renderTree, toAbsolutePath } from './helpers/project'
-import { clearAllQuickDappWorkspaceLocks } from '@remix-ui/helper'
-import { clearAllQuickDappGenerationContexts } from '../../helpers/quickDappGenerationContext'
+import { finishQuickDappWorkspaceLock, onQuickDappWorkspaceLockCreated, QuickDappWorkspaceLock } from '@remix-ui/helper'
+import { clearQuickDappGenerationContext } from '../../helpers/quickDappGenerationContext'
 import { clearQuickDappDocsContext } from '../../helpers/quickDappDocsContext'
 
 /**
@@ -69,6 +76,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
   private tools: DynamicStructuredTool[] = []
   private approvalGate: ToolApprovalGate | undefined
   private currentAbortController: AbortController | null = null
+  private quickDappLock: QuickDappWorkspaceLock | undefined
   /** Model-independent agent pieces, built once and reused across model swaps. */
   private checkpointer: IndexedDBCheckpointSaver | null = null
   private hasSkillsPermission: boolean | null = null
@@ -86,7 +94,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
   // Used after a cancel-and-reinitialize so the brand-new LangGraph thread
   // still has the prior user/assistant turns as context — otherwise the
   // model loses all memory whenever the user clicks Stop.
-  private pendingHistoryMessages: Array<{ role: 'user' | 'assistant'; content: string }> | null = null
+  private pendingHistoryMessages: Array<{ role: 'user' | 'assistant'; content: any }> | null = null
 
   private static generateThreadId(): string {
     return CONVERSATION_THREAD_PREFIX + `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
@@ -135,11 +143,15 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     const oldId = this.sessionThreadId
     this.sessionThreadId = DeepAgentInferencer.generateThreadId()
     remixAILogger.log('[DeepAgent-Thread] resetSessionThread:', this.sessionThreadId, '(was:', oldId, ')')
+    screenshotBuffer.setThread(this.sessionThreadId)
+    screenshotConsent.setThread(this.sessionThreadId)
   }
 
   setSessionThreadId(threadId: string): void {
     remixAILogger.log('[DeepAgent-Thread] setSessionThreadId:', threadId, '(was:', this.sessionThreadId, ')')
     this.sessionThreadId = threadId
+    screenshotBuffer.setThread(threadId)
+    screenshotConsent.setThread(threadId)
   }
 
   /**
@@ -151,14 +163,17 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
    *
    * One-shot: cleared as soon as it's consumed by answer().
    */
-  setPendingHistoryMessages(messages: Array<{ role: 'user' | 'assistant'; content: string }> | null): void {
+  setPendingHistoryMessages(messages: Array<{ role: 'user' | 'assistant'; content: any }> | null): void {
     if (!messages || messages.length === 0) {
       this.pendingHistoryMessages = null
       return
     }
     // Defensive copy + filter to the only two roles the graph accepts.
+    // Content may be a multimodal block array, so emptiness is judged on the
+    // flattened text rather than on `typeof content === 'string'`.
     this.pendingHistoryMessages = messages
-      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim().length > 0)
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') &&
+        (Array.isArray(m.content) ? m.content.length > 0 : contentToText(m.content).trim().length > 0))
       .map(m => ({ role: m.role, content: m.content }))
     remixAILogger.log('[DeepAgentInferencer] setPendingHistoryMessages: queued', this.pendingHistoryMessages.length, 'messages for next turn')
   }
@@ -183,6 +198,12 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     this.event = new EventEmitter()
     this.fallbackInferencer = fallbackInferencer
     this.streamEventHandler = new StreamEventHandler(this.event, () => this.sessionThreadId)
+    // Tag captures with this instance's thread from the start, so a rebuilt
+    // inferencer (model switch, cancel → reinitialize) starts with an empty
+    // buffer: it gets a fresh thread id and its graph checkpoint is gone, so
+    // the markers those screenshots belonged to are gone with it.
+    screenshotBuffer.setThread(this.sessionThreadId)
+    screenshotConsent.setThread(this.sessionThreadId)
 
     // The OpenRouter transport reports the model that actually served each
     // request — the only way to know what `auto` picked.
@@ -430,6 +451,10 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
 
   async answer(prompt: string, params: IParams, context?: string): Promise<string | null> {
     this.event.emit('onInference')
+    // Clears the "already on screen" registry, except when this turn IS the
+    // answer to something still rendered — that is exactly the case where a
+    // re-invoked subagent would redraw the picker it was called to handle.
+    generativeUiGuard.beginTurn(prompt)
 
     try {
       if (!this.agent) {
@@ -447,9 +472,10 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
       if (seeded.length > 0) {
         remixAILogger.log('[DeepAgentInferencer] answer(): seeding', seeded.length, 'history messages into new thread', this.sessionThreadId)
       }
+      const contextualPrompt = context ? `Context:\n${context}\n\nQuestion: ${prompt}` : prompt
       const messages = [
         ...seeded,
-        { role: 'user', content: context ? `Context:\n${context}\n\nQuestion: ${prompt}` : prompt }
+        { role: 'user', content: buildUserContent(contextualPrompt, params?.attachments) }
       ]
 
       try {
@@ -665,11 +691,32 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     return await generateStructured(this.model, schema, messages, { maxRepairs: 1, ...opts })
   }
 
+  private selectedModelSupportsVision(): boolean {
+    const { modelId, provider, routeProvider } = this.modelSelection
+    const entry = lookupCatalogEntry(this.modelSelection)
+    return modelSupportsVision({
+      id: modelId,
+      provider: routeProvider === 'ollama' ? 'ollama' : (entry?.provider ?? provider),
+      capabilities: entry?.capabilities
+    } as Pick<AIModel, 'capabilities' | 'id' | 'provider'>)
+  }
+
   private async runAgent(messages: any[]): Promise<string> {
+    // A "Don't allow" settles the request it answered, not every later one.
+    screenshotConsent.beginTurn()
     const thisRunControllers = new Set<AbortController>()
     const localAbortController = new AbortController()
     thisRunControllers.add(localAbortController)
     this.currentAbortController = localAbortController
+    this.quickDappLock = undefined
+    let runLock: QuickDappWorkspaceLock | undefined
+    const stopTrackingLock = onQuickDappWorkspaceLockCreated(lock => {
+      // Reinitialized/closed inferencers must not claim a new instance's work.
+      if (!this.__closed && this.currentAbortController && thisRunControllers.has(this.currentAbortController) && lock.operation !== 'publish') {
+        runLock = lock
+        this.quickDappLock = lock
+      }
+    })
     let fullResponse = ''
 
     const runTimeoutMs = this.config.timeout
@@ -695,7 +742,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
       this.streamEventHandler.startInactivityTracking()
 
       // https://docs.langchain.com/oss/python/deepagents/streaming
-      remixAILogger.log('[DeepAgent-Thread] ▶ runAgent called | thread_id:', this.sessionThreadId, '| message:', String(langchainMessages[0]?.content || '').substring(0, 60) + '...')
+      remixAILogger.log('[DeepAgent-Thread] ▶ runAgent called | thread_id:', this.sessionThreadId, '| message:', contentToText(langchainMessages[0]?.content).substring(0, 60) + '...')
 
       if (!this.agent) {
         throw new DeepAgentError(
@@ -942,6 +989,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
 
       throw error
     } finally {
+      stopTrackingLock()
       stallTimeout.clear()
       clearQuickDappDocsContext()
       // Best-effort trace delivery: the SDK drains only a slice of its queue
@@ -951,6 +999,18 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
       // Only null out if still one of this run's controllers (a new request might have started)
       if (this.currentAbortController && thisRunControllers.has(this.currentAbortController)) {
         this.currentAbortController = null
+      }
+      if (runLock) {
+        const lock = runLock
+        finishQuickDappWorkspaceLock(lock, () => {
+          clearQuickDappGenerationContext(lock.workspaceName)
+          this.plugin.emit('dappGenerationError', {
+            workspaceName: lock.workspaceName,
+            slug: lock.slug,
+            isUpdate: lock.operation === 'update',
+            error: 'AI stopped before the DApp was finalized. Your files have been kept; you can retry from RemixAI.'
+          })
+        })
       }
       this.event.emit('onToolCall', { toolName: '', toolInput: '', toolUIString: '', status: 'end', threadId: this.sessionThreadId })
     }
@@ -1022,6 +1082,27 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     }
   }
 
+  private createMkdirTool(): DynamicStructuredTool {
+    const backend = this.filesystemBackend
+    return tool(
+      async ({ path }: { path: string }) => {
+        try {
+          await backend.mkdir(path)
+          return `Created directory: ${path}`
+        } catch (error) {
+          return `Failed to create directory ${path}: ${(error as any)?.message ?? error}`
+        }
+      },
+      {
+        name: 'mkdir',
+        description: 'Create a directory in the current workspace. Parent directories are created as needed. Succeeds silently when the directory already exists.',
+        schema: z.object({
+          path: z.string().describe('Path of the directory to create, e.g. "contracts/tokens"')
+        })
+      }
+    ) as unknown as DynamicStructuredTool
+  }
+
   private async createAgentWithTools(selectedTools: DynamicStructuredTool[]): Promise<void> {
     try {
       if (!this.model) {
@@ -1047,12 +1128,26 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
       const checkpointer = this.checkpointer
       const hasSkillsPermission = this.hasSkillsPermission
       const harnessProfile = resolveHarnessProfile(this.modelSelection)
+      let shapedTools = applyHarnessToolRules(this.tools, harnessProfile)
 
+      if (!this.selectedModelSupportsVision()) {
+        remixAILogger.log(`[DeepAgentInferencer] ${this.modelSelection.modelId} cannot read images — hiding capture_ui_screenshot`)
+        shapedTools = shapedTools.filter(t => t.name !== 'capture_ui_screenshot')
+      }
+
+      // The main agent holds no Remix tools of its own: every capability is
+      // reached by delegating to a subagent, and the roster appended to the
+      // system prompt below is how it learns what is on offer. UI vision and
+      // automation live on Remix_Vision — see buildSubagentConfigs.
       // Create agent configuration with selected tools
       // Cast tools and model to any to handle @langchain/core version mismatch between root and deepagents
-      const mainAgentTool = this.tools.filter(tool =>
-        ['render_ui'].includes(tool.name)
+      const mainAgentTool = this.tools.filter(t =>
+        ['render_ui', 'list_models', 'switch_model'].includes(t.name)
       )
+      // deepagents' built-in filesystem toolset (ls/read_file/write_file/
+      // edit_file/delete/glob/grep) has no directory creation, so the backend's
+      // mkdir is surfaced here as a tool of its own.
+      mainAgentTool.push(this.createMkdirTool())
       const agentConfig: CreateDeepAgentParams = {
         backend: this.filesystemBackend as any,
         tools: mainAgentTool,
@@ -1063,14 +1158,13 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
         },
         skills: hasSkillsPermission ? ["skills/"] : [],
         checkpointer,
-        middleware: [createPatchToolCallsMiddleware(), new RemixDeepAgentMiddleware(this.plugin, this)],
+        middleware: [createPatchToolCallsMiddleware(), new RemixDeepAgentMiddleware(this.plugin, this), new RemixVisionMiddleware()],
       }
 
       if (this.config.enableSubagents && this.model) {
         // Subagents run on the user's selected model — the same instance the
         // main agent uses. No separate code-capable pick: a second model meant
         // subagents could answer from a model the user never chose.
-        const shapedTools = applyHarnessToolRules(this.tools, harnessProfile)
         if (shapedTools.length !== this.tools.length) {
           remixAILogger.log(
             `[DeepAgentInferencer] harness profile for ${this.modelSelection.modelId} hides ` +
@@ -1107,7 +1201,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
 
       this.agent = createDeepAgent(agentConfig as any) as DeepAgent
 
-      remixAILogger.log(`[DeepAgentInferencer] Recreated agent with ${selectedTools.length} selected tools`)
+      remixAILogger.log(`[DeepAgentInferencer] Recreated agent with ${selectedTools.length} tools available to subagents`)
     } catch (error) {
       remixAILogger.error('[DeepAgentInferencer] Failed to recreate agent with selected tools:', error)
       throw new DeepAgentError(
@@ -1211,11 +1305,15 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     this.event.emit('onInferenceDone')
 
     try {
-      clearAllQuickDappWorkspaceLocks()
-      clearAllQuickDappGenerationContexts()
+      const lock = this.quickDappLock
+      if (lock) {
+        finishQuickDappWorkspaceLock(lock, () => {
+          clearQuickDappGenerationContext(lock.workspaceName)
+          this.plugin.emit('generationProgress', null)
+        })
+      }
       clearQuickDappDocsContext()
-      remixAILogger.log('[QuickDapp][WorkspaceLock] cleared on AI cancel')
-      this.plugin.emit('generationProgress', null)
+      remixAILogger.log('[QuickDapp][WorkspaceLock] cleanup requested on AI cancel')
     } catch (_) { /* best-effort cleanup */ }
   }
 

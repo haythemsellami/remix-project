@@ -11,6 +11,8 @@ import { normalizeMarkdown } from 'libs/remix-ui/helper/src/lib/components/remix
 import { QueryParams } from '@remix-project/remix-lib'
 import { DAppUpdateReviewCard } from './DAppUpdateReviewCard'
 import { GenerativeUIRenderer } from './GenerativeUIRenderer'
+import { FileChangeGroup, splitAnswerAtChanges } from './fileChangeLines'
+import { AIFileChangeRecord } from '@remix/remix-ai-core'
 
 /** Content with the streaming turn separators (`---`) and whitespace removed. */
 const stripTurnSeparators = (content: string): string =>
@@ -22,11 +24,37 @@ const normalizeTurnSeparators = (content: string): string =>
     .replace(/(?:\n\s*[ \t]*-{3,}[ \t]*)+$/, '')
     .replace(/(?:\n\s*-{3,}[ \t]*){2,}\n/g, '\n\n---\n')
 
+/**
+ * Opens an attachment image in a new tab.
+ * Browsers block top-level navigation to `data:` URLs (the tab just stays
+ * blank), so the data URL is turned into a same-origin blob URL first.
+ */
+const openImageAttachment = (dataUrl?: string) => {
+  if (!dataUrl) return
+  if (!dataUrl.startsWith('data:')) {
+    window.open(dataUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+  try {
+    const [header, base64] = dataUrl.split(',')
+    const mime = /data:([^;,]+)/.exec(header)?.[1] || 'image/png'
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+    const win = window.open(url, '_blank', 'noopener,noreferrer')
+    // Revoking immediately would cancel the load in the new tab; give it time.
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+    if (!win) URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('[RemixAI] could not open attachment', e)
+  }
+}
+
 // ChatHistory component
 export interface ChatHistoryComponentProps {
   messages: ChatMessage[]
   isStreaming: boolean
-  isThinking?: boolean
   sendPrompt: (prompt: string) => void
   recordFeedback: (msgId: string, next: 'like' | 'dislike' | 'none') => void
   historyRef: React.RefObject<HTMLDivElement>
@@ -35,10 +63,15 @@ export interface ChatHistoryComponentProps {
   handleGenerateWorkspace: () => void
   handleLoadSkills: () => void
   allowedMcps: string[]
+  /** Marks a rendered component as answered so it stops accepting clicks. */
+  onUiComponentAnswered?: (msgId: string) => void
   /** DApp update review handlers */
   onDappReviewAcceptAll?: (msgId: string) => void
   onDappReviewRevertAll?: (msgId: string) => void
   onDappReviewViewDiff?: (filePath: string, newContent: string, oldContent: string) => void
+  /** File changes the agent made, per assistant message, in order */
+  fileChangesByMessage?: Record<string, AIFileChangeRecord[]>
+  onOpenFileChange?: (change: AIFileChangeRecord) => void
 }
 
 interface AiChatIntroProps {
@@ -61,7 +94,6 @@ const AiChatIntro: React.FC<AiChatIntroProps> = ({ theme }) => {
 export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
   messages,
   isStreaming,
-  isThinking,
   sendPrompt,
   recordFeedback,
   historyRef,
@@ -72,6 +104,9 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
   onDappReviewAcceptAll,
   onDappReviewRevertAll,
   onDappReviewViewDiff,
+  fileChangesByMessage,
+  onOpenFileChange,
+  onUiComponentAnswered,
   handleLoadSkills
 }) => {
   const [btnColor, setBtnColor] = useState('')
@@ -85,8 +120,9 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
     })
   }
 
-  // The thinking box belongs to the message currently being produced.
-  const lastAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id
+  // The thinking indicator is not rendered in the transcript: it lives in a
+  // fixed banner above the auto-accept banner (remix-ui-remix-ai-assistant),
+  // so it stays in one place instead of moving with the last message.
   return (
     <div
       ref={historyRef}
@@ -96,9 +132,6 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
         <AiChatIntro theme={theme} />
       ) : (
         messages.map(msg => {
-          if (msg.uiComponent){
-            console.log('uiComponent', msg)
-          }
           const isCorrupted = msg.role === 'assistant' && (msg.content === null || msg.content === undefined)
           const displayContent = isCorrupted ? '*Unable to load response.*' : (msg.content ?? '')
           const hasCollapsiblePrompt = msg.role === 'user' && !!msg.displayContent && msg.displayContent !== msg.content
@@ -107,7 +140,8 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
           // A turn that only reasoned and called tools leaves nothing but the
           // `---` turn separators behind; that rendered as a bubble of bare
           // horizontal rules. Separators alone are not content.
-          const hasContent = typeof displayContent === 'string' && stripTurnSeparators(displayContent).length > 0
+          const fileChanges = msg.role === 'assistant' ? fileChangesByMessage?.[msg.id] : undefined
+          const hasContent = (typeof displayContent === 'string' && stripTurnSeparators(displayContent).length > 0) || !!fileChanges?.length
           const hasAssistantActivity = !!(
             msg.isExecutingTools ||
             msg.activeSubagent ||
@@ -116,7 +150,6 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
             (msg.todos && msg.todos.length > 0) ||
             msg.dappUpdateReview?.status === 'pending' ||
             // the thinking box lives in this bubble now, so it keeps it alive
-            (isThinking && msg.id === lastAssistantId) ||
             msg.uiComponent
           )
 
@@ -156,7 +189,52 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
                         marginLeft: '4px'
                       } : undefined}
                     >
-                      {msg.role === 'assistant' || msg.role === 'editor_code_analysis' ? (
+                      {msg.attachments?.length > 0 && (
+                        // Rendered as real elements rather than through the
+                        // markdown viewer: rehypeSanitize strips data: URLs.
+                        // Assistant-side entries are screenshots the AI took
+                        // of the IDE — shown so the user can see what was sent.
+                        <div
+                          className="d-flex flex-row flex-wrap gap-2 align-items-center"
+                          data-id={msg.role === 'user' ? 'ai-user-attachments' : 'ai-capture-attachments'}
+                        >
+                          {msg.attachments.map(att => att.kind === 'image' ? (
+                            <img
+                              key={att.id}
+                              src={att.thumbnailDataUrl || att.dataUrl}
+                              alt={att.name}
+                              title={att.source === 'ai-capture' ? `${att.name} — sent to the model` : att.name}
+                              className="rounded"
+                              data-id={att.source === 'ai-capture' ? 'ai-capture-thumbnail' : undefined}
+                              style={{ maxWidth: 120, maxHeight: 120, objectFit: 'cover', border: '1px solid var(--bs-border-color)', cursor: 'pointer' }}
+                              onClick={() => openImageAttachment(att.dataUrl || att.thumbnailDataUrl)}
+                            />
+                          ) : (
+                            <span
+                              key={att.id}
+                              className="d-flex align-items-center gap-2 rounded px-2 py-1 small"
+                              style={{ border: '1px solid var(--bs-border-color)', maxWidth: 220 }}
+                              title={att.name}
+                            >
+                              <i className={`fas ${att.kind === 'document' ? 'fa-file-pdf' : 'fa-file-lines'} text-secondary`} style={{ fontSize: '0.8rem' }} />
+                              <span className="text-truncate">{att.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {msg.role !== 'user' && msg.attachments?.some(att => att.source === 'ai-capture') && (
+                        <div className="text-muted small d-flex align-items-center gap-2" data-id="ai-capture-caption">
+                          <i className="fas fa-camera" style={{ fontSize: '0.7rem' }} />
+                          <span>Screenshot of your IDE sent to the model</span>
+                        </div>
+                      )}
+                      {fileChanges?.length ? (
+                        // The answer with lines where the agent changed files
+                        splitAnswerAtChanges(displayContent, fileChanges).map((segment, index) => segment.kind === 'text'
+                          ? <React.Fragment key={index}>{RemixMarkdownViewer(theme, normalizeTurnSeparators(segment.text), btnColor, setBtnColor)}</React.Fragment>
+                          : <FileChangeGroup key={index} changes={segment.changes} onOpen={(change) => onOpenFileChange?.(change)} />
+                        )
+                      ) : msg.role === 'assistant' || msg.role === 'editor_code_analysis' ? (
                         RemixMarkdownViewer(theme, normalizeTurnSeparators(displayContent), btnColor, setBtnColor)
                       ) : (
                         <div className="ai-paragraph pb-0">
@@ -193,21 +271,6 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
                         </CustomTooltip>
                       </div>
                     )}
-                  </div>
-                )}
-                {/* Thinking sits above the tool indicator: the model reasons, then
-                    acts, and the UI should read in that order. */}
-                {msg.role === 'assistant' && isThinking && msg.id === lastAssistantId && (
-                  <div className="thinking-indicator small mb-2 p-2 rounded" data-id="remix-ai-thinking" style={{
-                    backgroundColor: theme?.toLowerCase() === 'dark' ? 'rgba(255, 193, 7, 0.15)' : 'rgba(255, 193, 7, 0.1)',
-                    border: '1px solid rgba(255, 193, 7, 0.3)'
-                  }}>
-                    <div className="d-flex align-items-center">
-                      <i className="fa fa-spinner fa-spin me-2 text-warning"></i>
-                      <span className="text-warning">
-                        <strong>Thinking</strong>
-                      </span>
-                    </div>
                   </div>
                 )}
                 {msg.role === 'assistant' && msg.isExecutingTools && (
@@ -293,15 +356,26 @@ export const ChatHistoryComponent: React.FC<ChatHistoryComponentProps> = ({
 
                 {/* Generative UI component */}
                 {msg.role === 'assistant' && msg.uiComponent && (
-                  <GenerativeUIRenderer
-                    payload={msg.uiComponent}
-                    onAction={(action, data) => {
-                      const text = data && Object.keys(data).length > 0
-                        ? `[ui:${action}]\n${JSON.stringify(data, null, 2)}`
-                        : `[ui:${action}]`
-                      sendPrompt(text)
-                    }}
-                  />
+                  // Answered or superseded components stay visible for the
+                  // record but stop accepting clicks: re-answering one would
+                  // send the model back into an exchange it has finished.
+                  <div
+                    className={msg.uiComponentStale ? 'generative-ui-spent' : undefined}
+                    aria-disabled={msg.uiComponentStale || undefined}
+                    data-id={msg.uiComponentStale ? 'ai-ui-component-spent' : 'ai-ui-component'}
+                  >
+                    <GenerativeUIRenderer
+                      payload={msg.uiComponent}
+                      onAction={(action, data) => {
+                        if (msg.uiComponentStale) return
+                        const text = data && Object.keys(data).length > 0
+                          ? `[ui:${action}]\n${JSON.stringify(data, null, 2)}`
+                          : `[ui:${action}]`
+                        onUiComponentAnswered?.(msg.id)
+                        sendPrompt(text)
+                      }}
+                    />
+                  </div>
                 )}
 
                 {/* Feedback buttons */}

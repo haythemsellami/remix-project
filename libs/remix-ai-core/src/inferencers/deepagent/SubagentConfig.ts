@@ -16,6 +16,7 @@ import {
   CONTRACT_RUNNER_PROMPT,
   CONTRACT_COMPILER_PROMPT,
   CONTRACT_CLASSIFIER_PROMPT,
+  REMIX_VISION_SUBAGENT_PROMPT,
   SOLIDITY_CODE_GENERATION_PROMPT
 } from './prompts/system/lightPrompts'
 import {
@@ -33,7 +34,8 @@ import {
   getQuickDappToolsForQuickDappSpecialist,
   getToolForSolidityCompiler,
   getToolsForDeployer,
-  getSecurityToolsForSecurityAuditor
+  getSecurityToolsForSecurityAuditor,
+  getUIToolsForVisionSpecialist
 } from './helpers/subagentToolFilters'
 import { Features } from '@remix-api'
 import { remixAILogger } from '../../helpers/logger'
@@ -77,20 +79,17 @@ export async function buildSubagentConfigs(
   const circleTools = getCircleToolsForCircleSpecialist(tools)
   const basicFileTools = getBasicFileToolsForGasOptimizer(tools)
   const fileOperationTools = getFileOperationTools(tools)
-  const securityTools = [...getSecurityToolsForSecurityAuditor(tools), ...fileOperationTools]
+  const renderUiTools = tools.filter(tool => tool.name === 'render_ui')
+  const securityTools = [...getSecurityToolsForSecurityAuditor(tools), ...fileOperationTools, ...renderUiTools]
   const debugTools = getDebugToolsForDebugSpecialist(tools)
   const solidityTools = [...getSolidityToolsForSolidityEngineer(tools), ...fileOperationTools]
   const webSearchTools = getWebSearchToolsForWebSearchSpecialist(tools)
   const conversionTools = getConversionToolsForConversionSpecialist(tools)
   const classifierTools = getToolForClassifierSpecialist(tools)
-  // Merge in fileOperationTools (file_write, file_read, directory_list, …) the same
-  // way Solidity Engineer / Comprehensive Auditor do — the QUICKDAPP_SPECIALIST
-  // prompt explicitly tells the LLM to "use file_write for implementation", so
-  // file_* tools must be exposed. Without these the specialist also cannot emit
-  // per-file tool cards ("Writing index.html…") during DApp generation.
   const quickDappTools = getQuickDappToolsForQuickDappSpecialist(tools)
   const solidityCompilerTools = getToolForSolidityCompiler(tools)
   const deployerTools = getToolsForDeployer(tools)
+  const uiTools = getUIToolsForVisionSpecialist(tools)
 
   const modelAny = model as any
   const agents: (SubAgent | CompiledSubAgent)[] = [
@@ -126,6 +125,19 @@ export async function buildSubagentConfigs(
     }
   ]
 
+  // The UI tools only work in a browser/desktop document, so the subagent is
+  // only offered where they were actually registered. Announcing it in a
+  // headless context would invite the main agent to delegate into a dead end.
+  if (uiTools.length > 0) {
+    agents.push({
+      name: 'Remix_Vision',
+      systemPrompt: REMIX_VISION_SUBAGENT_PROMPT,
+      model,
+      tools: uiTools,
+      description: 'Sees and operates the Remix IDE interface. Delegate here for anything about what is on the user\'s screen — "what am I looking at", "why is this panel showing an error", "where do I find X", reading a rendered view — for putting a file on screen ("open X", "show me X", "take me to X"), and for driving the UI directly (clicking a button, filling a field, switching panels). The only agent that can change what the user sees; no other agent can see or touch the interface.'
+    })
+  }
+
   // dapp:quickdapp permission required
   if (hasQuickdappPermission) {
     agents.push({
@@ -160,7 +172,7 @@ export async function buildSubagentConfigs(
         model,
         tools: securityTools,
         name: 'Comprehensive_Auditor',
-        description: 'Specializes in comprehensive auditing and analysis of smart contracts.',
+        description: 'Used for ALL security audit and contract review requests — any ask to audit a contract, review it against checklists, or produce an audit report MUST be delegated here, never done directly. It is the only agent with slither_scan, so an audit run without it silently skips static analysis. STATELESS: it has no memory of earlier calls, so your description must carry CONTRACT, FILE, CHECKLISTS (the audits/<Contract>/ folder) and RUN verbatim, plus the audience name when the user asks for a rewrite. An audience rewrite is also its job — never produce or decline that file yourself, and never report on it from a directory listing: delegate and let it write summary_<slug>.md.',
       }
     )
   }

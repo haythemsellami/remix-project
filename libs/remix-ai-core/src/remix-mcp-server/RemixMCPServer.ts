@@ -57,6 +57,8 @@ import { createCoordinationTools } from './handlers/CoordinationHandler';
 import { createSkillTools } from './handlers/SkillLoaderHandler';
 import { createDAppGeneratorTools } from './handlers/DAppGeneratorHandler';
 import { createGenerativeUITools } from './handlers/GenerativeUIHandler';
+import { createModelSelectionTools } from './handlers/ModelSelectionHandler';
+import { createUIAutomationTools } from './handlers/UIAutomationHandler';
 
 // Import resource providers
 import { ProjectResourceProvider } from './providers/ProjectResourceProvider';
@@ -696,6 +698,15 @@ export class RemixMCPServer extends EventEmitter implements IRemixMCPServer {
       'security_scan': ['analysis:security'],
       'estimate_gas': ['analysis:gas'],
 
+      // UI vision & automation
+      'inspect_ui': ['ui:read'],
+      'get_ui_map': ['ui:read'],
+      'get_ui_state': ['ui:read'],
+      'capture_ui_screenshot': ['ui:read'],
+      'scroll_element': ['ui:read'],
+      'click_element': ['ui:interact'],
+      'type_into_element': ['ui:interact'],
+
       // Additional tools
       'run_script': ['transaction:send'],
       'simulate_transaction': ['transaction:simulate']
@@ -845,6 +856,13 @@ export class RemixMCPServer extends EventEmitter implements IRemixMCPServer {
       const debuggingTools = createDebuggingTools();
       this._tools.registerBatch(debuggingTools);
 
+      // Register UI vision / automation tools (browser & desktop only)
+      remixAILogger.log(`[RemixMCPServer] Registering UI Automation tools (browser & desktop only)`);
+      if (typeof document !== 'undefined') {
+        this._tools.registerBatch(createUIAutomationTools());
+        remixAILogger.log(`[RemixMCPServer] UI Automation tools registered successfully`);
+      }
+
       // Register code analyser tools
       const codeAnalysisTools = createCodeAnalysisTools();
       this._tools.registerBatch(codeAnalysisTools);
@@ -902,6 +920,10 @@ export class RemixMCPServer extends EventEmitter implements IRemixMCPServer {
       // Register Generative UI tool
       const generativeUITools = createGenerativeUITools();
       this._tools.registerBatch(generativeUITools);
+
+      // Register model selection tools (list_models / switch_model)
+      const modelSelectionTools = createModelSelectionTools();
+      this._tools.registerBatch(modelSelectionTools);
 
       const totalTools = this._tools.list().length;
 
