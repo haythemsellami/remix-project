@@ -1,8 +1,7 @@
+import { assertEnsReverseEnabled, ensTestMode } from '@remix-endpoints-helper'
 import { Plugin } from '@remixproject/engine'
-import { createPublicClient, createWalletClient, custom, namehash, type Hex } from 'viem'
+import { createPublicClient, createWalletClient, custom, type Hex } from 'viem'
 import {
-  ENS_REGISTRY_L1,
-  ENS_REGISTRY_READ_ABI,
   ENS_EVENTS,
   ENS_PUBLIC_RESOLVER_L1,
   OWNABLE_ABI,
@@ -10,9 +9,7 @@ import {
   REVERSE_REGISTRAR_ABI_L1,
   REVERSE_REGISTRAR_ABI_L2,
   REVERSE_REGISTRAR_READ_ABI,
-  RESOLVER_NAME_ABI,
   SUPPORTED_CHAINS,
-  ZERO_ADDRESS,
   buildFullName,
   createEnsJob,
   fetchEnsJobStatus,
@@ -253,6 +250,7 @@ export class EnsContractNamesPlugin extends Plugin {
     this.emitForRequest(ENS_EVENTS.reverseStatus, requestId, { message: 'Connecting wallet...' })
 
     try {
+      assertEnsReverseEnabled()
       this.throwIfCancelled(requestId)
       const provider = await this.getWalletProvider()
       if (!provider) throw new Error('No wallet provider found. Please install MetaMask.')
@@ -349,6 +347,7 @@ export class EnsContractNamesPlugin extends Plugin {
   }
 
   private async readReverseStatus(chainId: number, contractAddress: string, fullName: string): Promise<ReverseCheckResult> {
+    if (ensTestMode) return { status: 'unavailable', name: '', done: false, message: 'Reverse registration is disabled in the local ENS test profile.' }
     const provider = await this.getWalletProvider()
     if (!provider) {
       return {
@@ -410,23 +409,8 @@ export class EnsContractNamesPlugin extends Plugin {
       return typeof name === 'string' ? name.trim() : ''
     }
 
-    const reverseNode = namehash(`${contractAddress.slice(2).toLowerCase()}.addr.reverse`)
-    const resolver = await publicClient.readContract({
-      address: ENS_REGISTRY_L1,
-      abi: ENS_REGISTRY_READ_ABI,
-      functionName: 'resolver',
-      args: [reverseNode],
-    }) as Hex
-
-    if (!resolver || resolver.toLowerCase() === ZERO_ADDRESS.toLowerCase()) return ''
-
-    const name = await publicClient.readContract({
-      address: resolver,
-      abi: RESOLVER_NAME_ABI,
-      functionName: 'name',
-      args: [reverseNode],
-    })
-    return typeof name === 'string' ? name.trim() : ''
+    const lookup = await lookupPrimaryEnsName({ chainId, contractAddress })
+    return lookup.verified ? lookup.name : ''
   }
 
   private async readOwner(publicClient: any, contractAddress: string): Promise<string> {

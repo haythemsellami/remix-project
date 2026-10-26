@@ -11,6 +11,9 @@
  *   updateEndpoints(config)
  */
 
+import { ensTestMode, ensParentName, ensDappParentName, validateEnsTestEnvironment } from './ens-environment'
+export { ensTestMode, ensParentName, ensDappParentName, ensWebsiteUrl, assertEnsReverseEnabled } from './ens-environment'
+
 export type EndpointUrls = {
   corsProxy: string;
   mcpCorsProxy: string;
@@ -135,13 +138,23 @@ function buildUrls(baseUrl: string): EndpointUrls {
 const defaultUrls: EndpointUrls = buildUrls('https://api.remix.live');
 
 // --- Resolution ---
-const prefix = ''
+const prefix = process.env.NX_ENDPOINTS_URL || ''
+// An invalid test build must not quietly use production defaults.
+validateEnsTestEnvironment(prefix)
+let ensDiscoveryReady = !ensTestMode
 
 const resolvedUrls: EndpointUrls = prefix
   ? buildUrls(prefix)
   : defaultUrls;
 
 export const endpointUrls = resolvedUrls;
+
+export function getEnsEndpoint(key: 'ensService' | 'ensContractNames' | 'ccipRead'): string {
+  if (!ensDiscoveryReady) throw new Error('ENS test discovery is unavailable or does not match this build')
+  const url = endpointUrls[key]
+  if (ensTestMode && new URL(url).origin !== new URL(prefix).origin) throw new Error('ENS endpoint escaped the test API origin')
+  return url
+}
 
 // --- Runtime Discovery (Optional) ---
 
@@ -150,6 +163,7 @@ export interface RemixConfig {
   baseUrl: string;
   services: Record<string, string>;
   websockets?: Record<string, string>;
+  ensEnvironment?: { testMode: boolean; parentName: string; dappParentName: string };
 }
 
 /**
@@ -173,6 +187,20 @@ export async function fetchRemixConfig(baseUrl: string): Promise<RemixConfig> {
  * consumers see the updated values immediately.
  */
 export function updateEndpoints(config: RemixConfig): void {
+  if (ensTestMode) {
+    ensDiscoveryReady = false
+    validateEnsTestEnvironment(config.baseUrl)
+    if (new URL(config.baseUrl).origin !== new URL(prefix).origin ||
+        !config.ensEnvironment?.testMode || config.ensEnvironment.parentName !== ensParentName ||
+        config.ensEnvironment.dappParentName !== ensDappParentName) {
+      throw new Error('ENS test discovery does not match the configured API and parent names')
+    }
+    for (const key of ['ensService', 'ensContractNames', 'ccipRead']) {
+      if (!config.services[key]?.startsWith('/') || config.services[key].startsWith('//')) {
+        throw new Error(`Missing or invalid ENS discovery service: ${key}`)
+      }
+    }
+  }
   //const base = 'https://api.remix.live'; // fallback
   const base = config.baseUrl.replace(/\/$/, '');
 
@@ -200,6 +228,7 @@ export function updateEndpoints(config: RemixConfig): void {
     endpointUrls.mcpCorsProxy = `${base}${config.services.mcp}`;
   } // SSO must always point to auth.api.remix.live (separate auth domain)
   //endpointUrls.sso = 'https://auth.api.remix.live/sso';
+  ensDiscoveryReady = true
 }
 
 /**
@@ -217,7 +246,8 @@ const discoveryAttempts = new Map<string, Promise<void>>();
  * attempt is discarded so a later retry can try again.
  */
 export async function initEndpoints(baseUrl?: string, timeoutMs = 3000): Promise<void> {
-  const base = (baseUrl || 'https://api.remix.live').replace(/\/$/, '');
+  const base = (baseUrl || prefix || 'https://api.remix.live').replace(/\/$/, '');
+  if (ensTestMode && new URL(base).origin !== new URL(prefix).origin) throw new Error('ENS discovery must use the configured test API')
   const existing = discoveryAttempts.get(base);
   if (existing) return existing;
 
@@ -231,6 +261,7 @@ export async function initEndpoints(baseUrl?: string, timeoutMs = 3000): Promise
       const config: RemixConfig = await res.json();
       updateEndpoints(config);
     } catch {
+      if (ensTestMode) ensDiscoveryReady = false
       // Discovery failed — continue with defaults, and let a retry re-attempt.
       discoveryAttempts.delete(base);
     } finally {

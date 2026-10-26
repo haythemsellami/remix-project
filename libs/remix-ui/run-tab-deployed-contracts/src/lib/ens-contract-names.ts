@@ -1,8 +1,8 @@
-import { endpointUrls } from '@remix-endpoints-helper'
+import { getEnsEndpoint, ensParentName } from '@remix-endpoints-helper'
 import type { Hex } from 'viem'
 import type { DeployedContract } from './types'
 
-export const PARENT_NAME = 'remixcontract.eth'
+export const PARENT_NAME = ensParentName
 export const ETHERSCAN_BASE = 'https://etherscan.io'
 export const ENS_APP_BASE = 'https://app.ens.domains'
 export const POLL_INTERVAL = 2000
@@ -103,7 +103,7 @@ export const CHAIN_EXPLORERS: Record<number, { url: string; name: string }> = {
 export type PreflightStatus =
   | 'idle' | 'checking' | 'available' | 'available_for_chain'
   | 'current' | 'taken' | 'unsupported_chain' | 'parent_not_owned'
-  | 'name_not_controlled' | 'project_not_controlled' | 'validation_only'
+  | 'name_not_controlled' | 'project_not_controlled' | 'validation_only' | 'read_only'
   | 'error'
 
 export type JobStep = 'pending' | 'checking' | 'creating_project' | 'creating_label' | 'setting_forward' | 'completed' | 'failed'
@@ -276,7 +276,7 @@ export const friendlyEnsError = (raw: string): string => {
   return raw
 }
 
-const apiBase = (): string => endpointUrls.ensContractNames
+const apiBase = (): string => getEnsEndpoint('ensContractNames')
 
 async function readJsonError(response: Response): Promise<string> {
   const fallback = `Server error (${response.status})`
@@ -324,7 +324,7 @@ export async function fetchEnsJobStatus(jobId: string): Promise<JobResult> {
 }
 
 export async function lookupPrimaryEnsName(params: {
-  name: string
+  name?: string
   chainId: number
   contractAddress: string
 }): Promise<PrimaryEnsLookupResult> {

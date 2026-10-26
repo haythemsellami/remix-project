@@ -1,3 +1,4 @@
+import { ensTestMode } from '@remix-endpoints-helper'
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react'
 import { DeployedContractsAppContext } from '../contexts'
 import { DeployedContract } from '../types'
@@ -326,7 +327,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
     ;(async () => {
       const reverse = await checkReverseStatus()
       if (!cancelled && mountedRef.current) {
-        setViewStep(reverse === 'set' ? 'done' : 'reverse')
+        setViewStep(ensTestMode || reverse === 'set' ? 'done' : 'reverse')
       }
     })()
 
@@ -372,7 +373,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
     case 'available': case 'available_for_chain': return 'fas fa-check-circle text-success'
     case 'current': return 'fas fa-check-circle text-info'
     case 'taken': case 'name_not_controlled': case 'project_not_controlled': return 'fas fa-times-circle text-danger'
-    case 'unsupported_chain': case 'parent_not_owned': case 'validation_only': return 'fas fa-exclamation-triangle text-warning'
+    case 'unsupported_chain': case 'parent_not_owned': case 'validation_only': case 'read_only': return 'fas fa-exclamation-triangle text-warning'
     case 'error': return 'fas fa-exclamation-circle text-danger'
     default: return 'fas fa-info-circle'
     }
@@ -393,6 +394,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
     case 'name_not_controlled': return 'This name exists but is not controlled by the Remix server.'
     case 'project_not_controlled': return 'This project exists but is not controlled by the Remix server.'
     case 'parent_not_owned': return 'The ENS naming service is not available (parent not owned).'
+    case 'read_only': return 'ENS is configured for read-only access. Registration is unavailable.'
     case 'validation_only': return 'ENS registration is unavailable until the server wallet is configured.'
     case 'unsupported_chain': return preflightError
     case 'error': return preflightError || 'An error occurred.'
@@ -403,7 +405,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
   const canRegister =
     preflightStatus === 'available' ||
     preflightStatus === 'available_for_chain'
-  const canOpenReverse = preflightStatus === 'current'
+  const canOpenReverse = !ensTestMode && preflightStatus === 'current'
 
   const getProgressSteps = (): { label: string; done: boolean; active: boolean }[] => {
     const ordered: JobStep[] = ['checking', 'creating_project', 'creating_label', 'setting_forward', 'completed']
@@ -434,7 +436,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
             <div className="mb-2 p-2 rounded d-flex align-items-center gap-2" style={{ backgroundColor: 'rgba(100, 196, 255, 0.05)', fontSize: '0.75rem' }}>
               <i className="fas fa-link" style={{ color: '#64c4ff' }} />
               <span style={{ color: subtextColor }}>
-                Deployed on <strong style={{ color: textColor }}>{SUPPORTED_CHAINS.get(chainId)}</strong> — server registers ENS on L1 (no gas cost to you)
+                {ensTestMode ? <>Local ENS test · target record: {SUPPORTED_CHAINS.get(chainId)}. Reverse registration is disabled.</> : <>Deployed on <strong style={{ color: textColor }}>{SUPPORTED_CHAINS.get(chainId)}</strong> — server registers ENS on L1 (no gas cost to you)</>}
               </span>
             </div>
           )}
@@ -571,7 +573,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
                       <span>{tx.type}</span>
                       {tx.hash && (
                         <a
-                          href={`${ETHERSCAN_BASE}/tx/${tx.hash}`}
+                          href={ensTestMode ? undefined : `${ETHERSCAN_BASE}/tx/${tx.hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ color: '#64c4ff' }}
@@ -670,7 +672,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
                 <div key={i} className="d-flex justify-content-between py-1" style={{ color: subtextColor }}>
                   <span>{tx.type}</span>
                   {tx.hash && (
-                    <a href={`${ETHERSCAN_BASE}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#64c4ff' }}>
+                    <a href={ensTestMode ? undefined : `${ETHERSCAN_BASE}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#64c4ff' }}>
                       {tx.hash.slice(0, 14)}...
                     </a>
                   )}
@@ -681,7 +683,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
 
           <div className="d-flex gap-2 mb-2">
             <a
-              href={`${getChainExplorer(chainId).url}/address/${contract.address}`}
+              href={ensTestMode ? undefined : `${getChainExplorer(chainId).url}/address/${contract.address}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-outline-primary btn-sm flex-fill"
@@ -690,7 +692,7 @@ export function EnsNaming({ contract, onClose }: EnsNamingProps) {
               <i className="fas fa-external-link-alt me-1" /> {getChainExplorer(chainId).name}
             </a>
             <a
-              href={`${ENS_APP_BASE}/${fullName}`}
+              href={ensTestMode ? undefined : `${ENS_APP_BASE}/${fullName}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-outline-primary btn-sm flex-fill"

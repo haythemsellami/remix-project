@@ -4,9 +4,9 @@ import { ethers } from 'ethers';
 import { PluginClient } from '@remixproject/plugin';
 import isElectron from 'is-electron';
 import { parseEnsRegistrationError } from '../../utils/ens-utils';
-import { endpointUrls } from '@remix-endpoints-helper';
+import { getEnsEndpoint, ensDappParentName, ensTestMode } from '@remix-endpoints-helper';
 
-const REMIX_ENDPOINT_ENS = endpointUrls.ensService;
+
 
 interface EnsRegistrationModalProps {
   show: boolean;
@@ -59,7 +59,7 @@ const EnsRegistrationModal: React.FC<EnsRegistrationModalProps> = ({
         ? localStorage.getItem('remix_access_token')
         : null;
 
-      const response = await fetch(`${REMIX_ENDPOINT_ENS}/register`, {
+      const response = await fetch(`${getEnsEndpoint('ensService')}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,10 +104,11 @@ const EnsRegistrationModal: React.FC<EnsRegistrationModalProps> = ({
       </Modal.Header>
 
       <Modal.Body style={{ fontSize: '0.95rem' }}>
+        {ensTestMode && <Alert variant="info">Local ENS test environment. Public ENS website links and reverse registration are unavailable.</Alert>}
         {/* Domain name display */}
         <div className="text-center mb-3 py-2 bg-light border rounded">
           <code className="fw-bold" style={{ fontSize: '1.05rem' }}>
-            {ensName}.remixdapp.eth
+            {ensName}.{ensDappParentName}
           </code>
         </div>
 
@@ -122,7 +123,7 @@ const EnsRegistrationModal: React.FC<EnsRegistrationModalProps> = ({
               (MetaMask, Coinbase Wallet, etc.)
             </li>
             <li>
-              A different wallet address <strong>cannot</strong> overwrite your registration.
+              Use the same owner address when updating an existing registration.
             </li>
             <li>
               Gas is <strong>sponsored by Remix</strong> — no cost to you.
@@ -135,7 +136,7 @@ const EnsRegistrationModal: React.FC<EnsRegistrationModalProps> = ({
           <i className="fas fa-exclamation-triangle me-2 mt-1"></i>
           <div>
             If you already own this name, the previous content hash will be{' '}
-            <strong>permanently replaced</strong>. The old link <strong>cannot be recovered</strong>.
+            <strong>replaced</strong>. The name will point to the new content. Keep the previous CID if you may need to restore it.
           </div>
         </Alert>
 
