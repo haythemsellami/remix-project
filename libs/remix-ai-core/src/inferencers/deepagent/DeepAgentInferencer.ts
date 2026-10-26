@@ -35,6 +35,7 @@ import { RemixDeepAgentMiddleware } from './deepAgentMiddleWare'
 import { RemixVisionMiddleware } from './visionMiddleware'
 import { screenshotBuffer } from './visionBuffer'
 import { screenshotConsent } from './screenshotConsent'
+import { turnAttachments } from './turnAttachments'
 
 import './AsyncLocalStorageInit'
 import { createModelInstance } from './ModelFactory'
@@ -145,6 +146,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     remixAILogger.log('[DeepAgent-Thread] resetSessionThread:', this.sessionThreadId, '(was:', oldId, ')')
     screenshotBuffer.setThread(this.sessionThreadId)
     screenshotConsent.setThread(this.sessionThreadId)
+    turnAttachments.setThread(this.sessionThreadId)
   }
 
   setSessionThreadId(threadId: string): void {
@@ -152,6 +154,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     this.sessionThreadId = threadId
     screenshotBuffer.setThread(threadId)
     screenshotConsent.setThread(threadId)
+    turnAttachments.setThread(threadId)
   }
 
   /**
@@ -204,6 +207,7 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     // the markers those screenshots belonged to are gone with it.
     screenshotBuffer.setThread(this.sessionThreadId)
     screenshotConsent.setThread(this.sessionThreadId)
+    turnAttachments.setThread(this.sessionThreadId)
 
     // The OpenRouter transport reports the model that actually served each
     // request — the only way to know what `auto` picked.
@@ -455,6 +459,8 @@ export class DeepAgentInferencer implements ICompletions, IGeneration {
     // answer to something still rendered — that is exactly the case where a
     // re-invoked subagent would redraw the picker it was called to handle.
     generativeUiGuard.beginTurn(prompt)
+    // Subagents only see the user's attachments through this
+    turnAttachments.beginTurn(params?.attachments)
 
     try {
       if (!this.agent) {

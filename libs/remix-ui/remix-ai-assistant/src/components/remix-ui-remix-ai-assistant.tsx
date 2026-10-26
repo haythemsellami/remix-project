@@ -876,7 +876,9 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
         setMessages(prev => {
           const userMsg = prev[prev.length - 2]
           if (userMsg && userMsg.role === 'user' && finalText) {
-            Promise.resolve(ChatHistory.pushHistory(userMsg.content, finalText, userMsg.displayContent, { fileChanges })).then(() => props.plugin.loadConversations())
+            // Screenshots the AI took ride on the assistant message
+            const captures = prev.find(m => m.id === assistantId)?.attachments
+            Promise.resolve(ChatHistory.pushHistory(userMsg.content, finalText, userMsg.displayContent, { fileChanges, attachments: captures }, { attachments: userMsg.attachments })).then(() => props.plugin.loadConversations())
           }
           // Clear streaming states but preserve subagent name for persistent styling
           return prev.map(m =>
@@ -2197,7 +2199,7 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
       const streamedContent = (idx >= 0 ? messages[idx].content || '' : '').trim()
       const userMsg = idx > 0 ? messages[idx - 1] : null
       if (userMsg && userMsg.role === 'user' && streamedContent) {
-        Promise.resolve(ChatHistory.pushHistory(userMsg.content, streamedContent, userMsg.displayContent, { fileChanges: stoppedFileChanges }))
+        Promise.resolve(ChatHistory.pushHistory(userMsg.content, streamedContent, userMsg.displayContent, { fileChanges: stoppedFileChanges, attachments: messages[idx].attachments }, { attachments: userMsg.attachments }))
           .then(() => props.plugin.loadConversations())
           .catch((err) => remixAILogger.warn('[RemixAI Assistant] failed to persist stopped stream:', err))
       }
@@ -2460,7 +2462,7 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
             ...prev,
             { id: assistantId, role: 'assistant', content: response, timestamp: Date.now(), sentiment: 'none' }
           ])
-          Promise.resolve(ChatHistory.pushHistory(trimmed, response, metadata?.displayText?.trim())).then(() => props.plugin.loadConversations())
+          Promise.resolve(ChatHistory.pushHistory(trimmed, response, metadata?.displayText?.trim(), undefined, { attachments: userMsg.attachments })).then(() => props.plugin.loadConversations())
           setIsStreaming(false)
           streamingAssistantIdRef.current = null
           return
@@ -2581,7 +2583,7 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
             (finalText: string, threadId) => {
               if (abortControllerRef.current?.signal.aborted) return
               setIsThinking(false)
-              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim())).then(() => props.plugin.loadConversations())
+              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim(), undefined, { attachments: userMsg.attachments })).then(() => props.plugin.loadConversations())
               setIsStreaming(false)
               props.plugin.call('remixAI', 'setAssistantThrId', threadId)
             },
@@ -2605,7 +2607,7 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
             (finalText: string) => {
               if (abortControllerRef.current?.signal.aborted) return
               setIsThinking(false)
-              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim())).then(() => props.plugin.loadConversations())
+              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim(), undefined, { attachments: userMsg.attachments })).then(() => props.plugin.loadConversations())
               setIsStreaming(false)
             },
             undefined,
@@ -2622,7 +2624,7 @@ export const RemixUiRemixAiAssistant = React.forwardRef<
             },
             (finalText: string) => {
               if (abortControllerRef.current?.signal.aborted) return
-              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim())).then(() => props.plugin.loadConversations())
+              Promise.resolve(ChatHistory.pushHistory(trimmed, finalText, metadata?.displayText?.trim(), undefined, { attachments: userMsg.attachments })).then(() => props.plugin.loadConversations())
               setIsStreaming(false)
             }
           )
