@@ -1,6 +1,6 @@
 # Browser tests and CI
 
-The `Monad integration` GitHub Actions workflow runs on pull requests targeting `master`, pushes to `master`, and manual dispatch. It tests the installed `monad-revmjs` package through the provider, checks types, runs the existing disassembler tests, builds Remix, and runs the Chromium suite. The standard `test:libs` command also includes `remix-monad`.
+The `Monad integration` GitHub Actions workflow runs on pull requests targeting `master`, pushes to `master`, and manual dispatch. It tests the installed `monad-revmjs` package through the provider, checks types, runs the existing debugger tests, builds Remix, and runs the Chromium suite. The standard `test:libs` command also includes `remix-monad`.
 
 Use the Node version in `.nvmrc` and install with `yarn install --frozen-lockfile`. From the repository root:
 
@@ -16,6 +16,8 @@ On Linux, use `yarn playwright install --with-deps chromium` to install browser 
 The dedicated Playwright configuration starts a fresh server on `127.0.0.1:8090`; leave that port free. It serves the compiler pinned by `yarn.lock` from a generated directory under `dist/apps/remix-ide/__monad-tests__`. Each test starts with a fresh browser context and compiles the shared `MonadDemo.sol` example for Cancun through the IDE. Normal Remix startup still fetches public configuration over the network.
 
 All three environments (Monad Next, Monad Ten, and Ethereum Osaka) exercise deployment, constructor stepping, storage reads and writes, source highlighting, and decoded Solidity state. Monad Next also executes `CALLSTACKDEPTH` through a nested `STATICCALL`, checks instruction PCs `0` and `2`, and verifies stack values while stepping backward and forward. Fork-specific opcode rejection is covered by the provider integration suite.
+
+The [NestedCalls.sol](../examples/NestedCalls.sol) fixture covers nested calls and failure paths. Provider tests check `CALLSTACKDEPTH` and `CALLERN` through `CALL`, `STATICCALL`, and `DELEGATECALL`, calldata and return decoding, delegated storage, caught and propagated reverts, out-of-gas, and invalid extensions. They also check descendant rollback, source call-tree boundaries, and preservation of engine gas costs. Browser tests select nested calls in the call tree and verify source highlighting, decoded storage, and navigation across a revert; Monad Next additionally navigates the raw-bytecode probe. The workflow runs existing Ethereum debugger and storage-decoder regressions alongside these checks.
 
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 

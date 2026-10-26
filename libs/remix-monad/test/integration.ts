@@ -13,7 +13,7 @@ import { atIndex } from '../../remix-debug/src/source/sourceMappingDecoder'
 import { getOpcodeInfo, updateSymbolicStack } from '../../remix-debug/src/solidity-decoder/opcodeStackHandler'
 /* eslint-enable @nrwl/nx/enforce-module-boundaries */
 
-await init({ module_or_path: readFileSync(new URL(import.meta.resolve('monad-revmjs/wasm'))) })
+await init({ module_or_path: readFileSync(new URL(await import.meta.resolve('monad-revmjs/wasm'))) })
 const source = readFileSync('libs/remix-monad/examples/MonadDemo.sol', 'utf8')
 const compiled = JSON.parse(solc.compile(JSON.stringify({
   language: 'Solidity', sources: { 'MonadDemo.sol': { content: source } },
@@ -72,7 +72,7 @@ test('deploy Solidity, commit storage, execute Monad opcode and load the Remix d
       if (receipt.hash === store.hash) {
         const step = trace.findIndex(step => step.op === 'SSTORE')
         const instruction = debuggerInstance.codeManager.getInstructionIndex(address, step)
-        const location = atIndex(instruction, artifact.evm.deployedBytecode.sourceMap)
+        const location = atIndex(instruction, artifact.evm.deployedBytecode.sourceMap) as { start: number; length: number }
         assert.ok(source.slice(location.start, location.start + location.length).includes('value = newValue'))
         const readSlot = (index: number): Promise<any> => new Promise((resolve, reject) => {
           debuggerInstance.storageViewAt(index, address).storageSlot(ZeroHash, (error, slot) => error ? reject(error) : resolve(slot))
@@ -172,7 +172,7 @@ test('supported Monad forks use the Osaka opcode baseline in both decoders', () 
   const expected = ['CLZ', 'PUSH0', 'SSTORE', 'STOP']
   for (const hardfork of ['monad-ten', 'monad-next', 'osaka']) {
     const [names] = nameOpCodes(raw, hardfork)
-    assert.deepEqual(names.map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
+    assert.deepEqual((names as string[]).map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
     assert.deepEqual(parseCode(raw, hardfork).map(opcode => opcode.name), expected, hardfork)
   }
 })
@@ -187,7 +187,7 @@ test('Ethereum opcode availability follows the requested hardfork in both decode
   ]
   for (const { hardfork, expected } of cases) {
     const [names] = nameOpCodes(raw, hardfork)
-    assert.deepEqual(names.map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
+    assert.deepEqual((names as string[]).map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
     assert.deepEqual(parseCode(raw, hardfork).map(opcode => opcode.name), expected, hardfork)
   }
 })
