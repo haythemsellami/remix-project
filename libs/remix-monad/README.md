@@ -19,6 +19,8 @@ yarn test:monad
 yarn nx serve remix-ide
 ```
 
+The integration suite also runs with `yarn test:libs`. To test the built IDE in Chromium, run `yarn nx build remix-ide --configuration=development`, `yarn playwright install chromium`, then `yarn test:monad:browser`. See [browser tests and CI](docs/testing.md) for coverage and failure diagnostics.
+
 The dependency supplies the WASM module, JavaScript loader and TypeScript declarations. The module is loaded on demand when a Monad environment is selected; the bundler emits its WASM asset. The provider uses the package's exported request and result types.
 
 For engine changes, build and test `crates/monad-revmjs` in the engine repository, update the package pin, then rerun this integration's tests. Normal Remix builds consume the package without rebuilding it.
