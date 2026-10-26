@@ -41,8 +41,12 @@ jobs:
           yarn tsc -p tests/monad/tsconfig.json
       - name: Lint browser tests
         run: yarn eslint playwright.monad.config.ts tests/monad/*.ts
-      - name: Test existing disassembler behavior
-        run: yarn ts-node --project tsconfig.base.json --require tsconfig-paths/register node_modules/.bin/tape libs/remix-debug/test/disassembler.ts
+      - name: Test existing debugger behavior
+        run: >-
+          yarn ts-node --project tsconfig.base.json --require tsconfig-paths/register node_modules/.bin/tape
+          libs/remix-debug/test/disassembler.ts libs/remix-debug/test/traceManager.ts
+          libs/remix-debug/test/decoder/callTypes.ts libs/remix-debug/test/decoder/storageDecoder.ts
+          libs/remix-debug/test/debugger.ts
       - name: Build Remix with its VM workers and WASM asset
         run: yarn nx build remix-ide --configuration=development --skip-nx-cache
       - name: Install Chromium
