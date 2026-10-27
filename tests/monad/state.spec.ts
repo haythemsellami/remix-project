@@ -32,27 +32,13 @@ async function selectSavedOrLocal(page: Page, category: string, name: string) {
 }
 
 for (const fork of ['monad-next', 'monad-ten'] as const) {
-  test(`${fork}: bound history, save, reset and restore through the IDE`, async ({ page }) => {
+  test(`${fork}: save, reset and restore through the IDE`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page)
     const deploymentState = await rpc(page, 'eth_getStateDb')
     const deployment = deploymentState.blocks.at(-1).transactions[0]
     const address = (await rpc(page, 'eth_getTransactionReceipt', deployment)).contractAddress
     const [from] = await rpc(page, 'eth_accounts')
-
-    await test.step('Evict old debugging data through repeated calls in the real worker', async () => {
-      await page.evaluate(async ({ address, from, data }) => {
-        const web3 = (window as any).__remixVM_web3
-        for (let i = 0; i < 105; i++) await web3.send('eth_call', [{ from, to: address, data }, 'latest'])
-      }, { address, from, data: abi.encodeFunctionData('value') })
-      const state = await rpc(page, 'eth_getStateDb')
-      expect(state.version).toBe(2)
-      expect(state.history).toHaveLength(100)
-      expect(state.history.reduce((total, entry) => total + new TextEncoder().encode(JSON.stringify(entry)).byteLength, 0)).toBeLessThanOrEqual(64 * 1024 * 1024)
-      expect(state.history.some(([hash]) => hash === deployment)).toBe(false)
-      expect((await rpc(page, 'eth_getTransactionReceipt', deployment)).status).toBe('0x1')
-      await expect(rpc(page, 'debug_traceTransaction', deployment)).rejects.toThrow(/no longer retained/)
-    })
 
     await openContract(page)
     const debugButton = await transact(page, 'store', '42')
@@ -61,7 +47,7 @@ for (const fork of ['monad-next', 'monad-ten'] as const) {
     const stored = saved.blocks.at(-1).transactions[0]
     const snapshotName = `saved-${fork}`
 
-    await test.step('Save a named state with recent debugging history', async () => {
+    await test.step('Save a named state with transaction and call debugging data', async () => {
       await changeProvider(page, async () => {
         await page.locator('[data-id="fork-state-icon"]').click()
         await page.locator('[data-id="forkInput"]').fill(snapshotName)
@@ -69,9 +55,12 @@ for (const fork of ['monad-next', 'monad-ten'] as const) {
         await expect(page.locator(`[data-id="selected-provider-vm-fs-${snapshotName}"]`)).toBeVisible()
       })
       const restored = await rpc(page, 'eth_getStateDb')
+      expect(restored.version).toBe(1)
       expect(restored.engine).toBe(saved.engine)
       expect(restored.keys).toEqual(saved.keys)
-      expect(restored.history).toEqual(saved.history)
+      expect(restored.executions).toEqual(saved.executions)
+      expect(restored.tags).toEqual(saved.tags)
+      expect(restored.callCounter).toBe(saved.callCounter)
     })
 
     await test.step('Reset the original environment and verify it stays empty when reopened', async () => {
@@ -85,18 +74,22 @@ for (const fork of ['monad-next', 'monad-ten'] as const) {
       const reset = await rpc(page, 'eth_getStateDb')
       expect(reset.blocks).toHaveLength(1)
       expect(reset.executions).toEqual([])
-      expect(reset.history).toEqual([])
+      expect(reset.tags).toEqual([])
+      expect(reset.callCounter).toBe(0)
       expect(await rpc(page, 'eth_getBalance', from, 'latest')).toBe('0x56bc75e2d63100000')
       expect(await rpc(page, 'eth_getTransactionCount', from, 'latest')).toBe('0x0')
       expect(await rpc(page, 'eth_getCode', address, 'latest')).toBe('0x')
       expect(await rpc(page, 'eth_getTransactionReceipt', stored)).toBeNull()
     })
 
-    await test.step('Restore saved state and debug a retained storage write', async () => {
+    await test.step('Restore saved state and debug a saved storage write', async () => {
       await selectSavedOrLocal(page, 'Forked State', `vm-fs-${snapshotName}`)
       const restored = await rpc(page, 'eth_getStateDb')
       expect(restored.engine).toBe(saved.engine)
-      expect(restored.history).toEqual(saved.history)
+      expect(restored.executions).toEqual(saved.executions)
+      expect(restored.tags).toEqual(saved.tags)
+      expect(restored.callCounter).toBe(saved.callCounter)
+      expect((await rpc(page, 'debug_traceTransaction', deployment)).structLogs.length).toBeGreaterThan(0)
       expect(await rpc(page, 'eth_getStorageAt', address, '0x0', 'latest')).toBe('0x' + '2a'.padStart(64, '0'))
       await debugTransaction(page, debugButton)
       await showOpcodes(page)

@@ -58,7 +58,7 @@ This local chain has ID **1337**, five funded development accounts with **100 MO
 
 Monad charges the submitted transaction gas limit. Receipts use `tx_gas_used()`; consumption uses `total_gas_spent()`. Estimation searches for a successful gas limit without committing state. Gas-sensitive contracts can be non-monotonic, so estimation is not a guarantee that a different future state will execute identically.
 
-State export contains the engine snapshot, local development keys, blocks, receipts and retained debugging history. History defaults to 100 executions and 64 MiB of serialized data. Restore reapplies these limits and validates the saved state; reset creates a fresh engine. See [history and persistence](docs/history.md) for retention behavior and saved-state compatibility.
+State export contains the engine snapshot, local development keys, blocks, receipts, execution history and call metadata. Restore validates saved state and preserves debugging records; reset creates a fresh engine. See [save, reset and restore](docs/state.md) for saved-state compatibility.
 
 ## Current coverage and limits
 
@@ -69,7 +69,7 @@ This is the first local execution and debugging slice. Remaining work includes:
 - Remote RPC forking, historical `eth_call`, and canonical replay context, including reserve-balance metadata and staking system inputs.
 - Access-list, authorization and blob transaction workflows; Hardhat console decoding; routing Remix Solidity unit tests and the CLI to this backend.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
-- Broader persistence and memory management. Retained debugging history is bounded; chain state and transaction metadata still grow with the session. Each trace is also capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly.
+- Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
 - Broader precompile and nested-call conformance tests, cancellation, and registry release automation. The engine repository's CI builds and tests the npm archive.
 
 Blocks and receipts are synthetic local records. State, transaction and receipt roots and blooms are placeholders; they are not cryptographic proofs or full-node RPC equivalents. Calls have separate synthetic records for debugging and do not alter canonical local blocks or committed state. Unsupported RPC methods return an explicit error.

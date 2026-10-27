@@ -1,23 +1,23 @@
 import { Wallet } from 'ethers'
-import { DebugRecord } from './history'
 import { EngineResult, MonadSpec, RpcError } from './types'
 
 export interface RecordedExecution {
   tx: any
   receipt: any
   block: any
-  result: Omit<EngineResult, 'structLogs' | 'preimages'>
+  result: EngineResult
+  before: string
+  after: string
 }
 
 export interface SavedState {
   backend: 'monad-revm'
-  version: 2
+  version: 1
   spec: MonadSpec
   engine: string
   keys: string[]
   blocks: any[]
   executions: [string, RecordedExecution][]
-  history: [string, DebugRecord][]
   tags: [string, string][]
   callCounter: number
 }
@@ -50,20 +50,19 @@ function snapshot(value: any, spec: MonadSpec) {
   return value as string
 }
 
-function debugRecord(value: any, spec: MonadSpec): DebugRecord {
+function validateTrace(value: any) {
   if (!object(value) || !Array.isArray(value.structLogs) || !object(value.preimages)) invalid('malformed debugging history')
   for (const step of value.structLogs) {
     if (!object(step) || !integer(step.pc) || !integer(step.depth) || step.depth < 1 || !integer(step.gas) || !integer(step.gasCost) || typeof step.op !== 'string' || !Array.isArray(step.stack) || step.stack.some(word => typeof word !== 'string' || !/^[\da-f]{64}$/i.test(word)) || typeof step.memory !== 'string' || !/^(?:[\da-f]{2})*$/i.test(step.memory) || (step.error !== undefined && typeof step.error !== 'string')) invalid('malformed trace step')
   }
   if (Object.entries(value.preimages).some(([key, value]) => !/^[\da-f]{64}$/i.test(key) || typeof value !== 'string' || !/^(?:[\da-f]{2})*$/i.test(value))) invalid('malformed hash preimage')
-  return { before: snapshot(value.before, spec), after: snapshot(value.after, spec), structLogs: value.structLogs, preimages: value.preimages }
 }
 
 /** Validate and detach imported data before replacing any live provider state. */
 export function readState(input: unknown, spec: MonadSpec): SavedState {
   let state: any
   try { state = JSON.parse(JSON.stringify(input)) } catch { invalid('expected JSON state') }
-  if (!object(state) || state.backend !== 'monad-revm' || ![1, 2].includes(state.version) || state.spec !== spec) {
+  if (!object(state) || state.backend !== 'monad-revm' || state.version !== 1 || state.spec !== spec) {
     throw new RpcError('Saved state belongs to a different backend, version or Monad specification')
   }
   snapshot(state.engine, spec)
@@ -80,16 +79,14 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   for (const [index, block] of state.blocks.entries()) {
     if (!object(block) || block.number !== '0x' + index.toString(16) || !hash(block.hash) || !Array.isArray(block.transactions) || block.transactions.length !== (index === 0 ? 0 : 1) || (index > 0 && block.parentHash !== state.blocks[index - 1].hash)) invalid('malformed local block chain')
   }
-  const history: [string, DebugRecord][] = []
   const executions = pairs(state.executions, 'executions').map(([id, record]): [string, RecordedExecution] => {
     if (!hash(id) || !object(record) || !object(record.tx) || !object(record.receipt) || !object(record.block) || !object(record.result) || record.tx.hash !== id || record.receipt.transactionHash !== id || record.block.hash !== record.tx.blockHash || record.receipt.blockHash !== record.block.hash || !hash(record.block.hash)) invalid('malformed execution record')
     const result = record.result
     if (typeof result.success !== 'boolean' || !hex(result.returnValue) || !integer(result.gasUsed) || !integer(result.gasSpent) || !Array.isArray(result.logs) || !Array.isArray(record.receipt.logs) || typeof result.traceTruncated !== 'boolean') invalid('malformed execution result')
-    if (state.version === 1) history.push([id, debugRecord({ before: record.before, after: record.after, structLogs: result.structLogs, preimages: result.preimages }, spec)])
-    return [id, { tx: record.tx, receipt: record.receipt, block: record.block, result: {
-      success: result.success, error: result.error, returnValue: result.returnValue, createdAddress: result.createdAddress,
-      gasUsed: result.gasUsed, gasSpent: result.gasSpent, logs: result.logs, traceTruncated: result.traceTruncated
-    } }]
+    validateTrace(result)
+    snapshot(record.before, spec)
+    snapshot(record.after, spec)
+    return [id, record]
   })
   const records = new Map(executions)
   for (const block of state.blocks) {
@@ -98,15 +95,10 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
       if (!record || record.tx.blockHash !== block.hash || record.tx.blockNumber !== block.number) invalid('block references a missing or inconsistent transaction')
     }
   }
-  if (state.version === 2) {
-    for (const [id, data] of pairs(state.history, 'history')) {
-      if (!records.has(id)) invalid('history references an unknown execution')
-      history.push([id, debugRecord(data, spec)])
-    }
-  }
-  const tags = state.version === 1 ? [] : pairs(state.tags, 'call tags')
+  const tags = state.tags === undefined ? [] : pairs(state.tags, 'call tags')
   if (tags.some(([, id]) => !records.has(id))) invalid('call tag references an unknown execution')
-  const callCounter = state.version === 1 ? executions.length : state.callCounter
+  // Older version 1 saves omit call metadata. Start above their recorded call count.
+  const callCounter = state.callCounter === undefined ? executions.length : state.callCounter
   if (!integer(callCounter) || callCounter < executions.length - state.blocks.length + 1) invalid('invalid call counter')
-  return { backend: 'monad-revm', version: 2, spec, engine: state.engine, keys: state.keys, blocks: state.blocks, executions, history, tags, callCounter }
+  return { backend: 'monad-revm', version: 1, spec, engine: state.engine, keys: state.keys, blocks: state.blocks, executions, tags, callCounter }
 }
