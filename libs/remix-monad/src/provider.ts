@@ -2,6 +2,8 @@ import { getAddress, getBytes, keccak256, toQuantity, toUtf8Bytes, Transaction, 
 import type { ExecuteRequest } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
+import { DebugHistory, HistoryLimits } from './history'
+import { readState, RecordedExecution } from './state'
 
 const CHAIN_ID = 1337
 const GAS_LIMIT = 30_000_000
@@ -16,18 +18,10 @@ const KEYS = [
   'f49bf239b6e554fdd08694fde6c67dac4d01c04e0dda5ee11abee478983f3bc0'
 ]
 
-interface RecordedExecution {
-  tx: any
-  receipt: any
-  block: any
-  result: EngineResult
-  before: string
-  after: string
-}
-
 export interface MonadProviderOptions {
   fork: MonadSpec
-  stateDb?: { backend: string, version: number, spec: MonadSpec, engine: string, keys: string[], blocks: any[], executions: [string, RecordedExecution][] }
+  stateDb?: unknown
+  historyLimits?: Partial<HistoryLimits>
 }
 
 /** Local, serial execution provider. No requests are broadcast to a network. */
@@ -36,11 +30,13 @@ export class MonadProvider {
   private wallets = new Map<string, Wallet>()
   private blocks: any[] = []
   private executions = new Map<string, RecordedExecution>()
+  private history: DebugHistory
   private tags = new Map<string, string>()
   private callId: string | number | undefined
   private callCounter = 0
   private queue: Promise<unknown> = Promise.resolve()
   private initialized = false
+  readonly options: MonadProviderOptions
 
   readonly Accounts = {
     _addAccount: (key: string, balance = BALANCE) => this.addAccount(key, balance),
@@ -49,8 +45,10 @@ export class MonadProvider {
     }
   }
 
-  constructor(readonly options: MonadProviderOptions, engine?: MonadEngine) {
+  constructor(options: MonadProviderOptions, engine?: MonadEngine) {
+    this.options = { ...options }
     this.engine = engine
+    this.history = new DebugHistory(options.historyLimits)
   }
 
   async init() {
@@ -59,18 +57,25 @@ export class MonadProvider {
       await wasm.default()
       this.engine = new wasm.Engine(this.options.fork, CHAIN_ID)
     }
-    const state = this.options.stateDb
-    if (state) {
-      if (state.backend !== 'monad-revm' || state.version !== 1 || state.spec !== this.options.fork) {
-        throw new RpcError('Saved state belongs to a different backend or Monad specification')
-      }
-      this.engine.restore(state.engine)
+    const stateDb = this.options.stateDb
+    // Imported snapshots can exceed the current budget; do not retain the input.
+    delete this.options.stateDb
+    if (stateDb !== undefined) {
+      const state = readState(stateDb, this.options.fork)
+      const wallets = new Map<string, Wallet>()
       for (const key of state.keys) {
         const wallet = new Wallet(key)
-        this.wallets.set(wallet.address.toLowerCase(), wallet)
+        wallets.set(wallet.address.toLowerCase(), wallet)
       }
+      const history = new DebugHistory(this.options.historyLimits)
+      for (const [hash, record] of state.history) history.retain(hash, record)
+      this.engine.restore(state.engine)
+      this.wallets = wallets
       this.blocks = state.blocks
       this.executions = new Map(state.executions)
+      this.history = history
+      this.tags = new Map(state.tags)
+      this.callCounter = state.callCounter
     } else {
       for (const key of KEYS) this.addAccount(key)
       this.blocks.push(this.makeBlock(0, ZeroHash, [], 0))
@@ -118,7 +123,9 @@ export class MonadProvider {
       }
       throw new RpcError('Historical state is unavailable')
     }
-    return JSON.parse(execution.after).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
+    const history = this.history.get(execution.tx.hash)
+    if (!history) throw new RpcError('Historical state is no longer retained for this local block (Monad history limit)', -32000)
+    return JSON.parse(history.after).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
   }
 
   private block(tag: string) {
@@ -222,8 +229,10 @@ export class MonadProvider {
       cumulativeGasUsed: toQuantity(result.gasUsed), gasUsed: toQuantity(result.gasUsed),
       effectiveGasPrice, status: result.success ? '0x1' : '0x0', logs, logsBloom: BLOOM, type: toQuantity(tx.type)
     }
-    if (result.traceTruncated) result.structLogs = []
-    this.executions.set(hash, { tx: rpcTx, receipt, block, result, before, after: commit ? this.engine.snapshot() : before })
+    const { structLogs, preimages, ...summary } = result
+    this.executions.set(hash, { tx: rpcTx, receipt, block, result: summary })
+    this.history.retain(hash, { before, after: commit ? this.engine.snapshot() : before,
+      structLogs: result.traceTruncated ? [] : structLogs, preimages: result.traceTruncated ? {} : preimages })
     if (!commit) {
       const id = input.timestamp ?? this.callId
       if (id !== undefined) this.tags.set(String(id), hash)
@@ -262,10 +271,17 @@ export class MonadProvider {
     return record
   }
 
+  private debugging(hash: string) {
+    this.recorded(hash)
+    const record = this.history.get(hash)
+    if (!record) throw new RpcError('Debugging history is no longer retained for this transaction or call (Monad history limit)', -32000)
+    return record
+  }
+
   private storageRange([blockHash, index, address, start = ZeroHash, max = 1000]: any[]) {
     const record = [...this.executions.values()].find(record => record.tx.blockHash === blockHash && Number(index) === 0)
     if (!record) throw new RpcError('Unknown local transaction for storage inspection')
-    const account = JSON.parse(record.before).accounts[address.toLowerCase()]
+    const account = JSON.parse(this.debugging(record.tx.hash).before).accounts[address.toLowerCase()]
     const entries = Object.entries(account?.storage || {}).map(([key, value]) => [keccak256(key), { key, value }])
       .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
       .filter(([hash]) => String(hash) >= start)
@@ -324,18 +340,19 @@ export class MonadProvider {
       const { result } = this.recorded(params[0])
       if (result.traceTruncated) throw new RpcError('Trace exceeded the local limit (100,000 steps or 32 MiB); use a smaller transaction', -32000)
       return { failed: !result.success, gas: toQuantity(result.gasUsed), returnValue: result.returnValue, return: result.returnValue,
-        fork: this.options.fork, structLogs: result.structLogs.map(step => ({ ...step, memory: getBytes('0x' + step.memory) })) }
+        fork: this.options.fork, structLogs: this.debugging(params[0]).structLogs.map(step => ({ ...step, stack: [...step.stack], memory: getBytes('0x' + step.memory) })) }
     }
     case 'debug_storageRangeAt': return this.storageRange(params)
     case 'debug_preimage': {
       const key = params[0].replace(/^0x/, '').toLowerCase()
-      for (const { result } of this.executions.values()) if (result.preimages[key] !== undefined) return result.preimages[key]
+      for (const [, record] of this.history.entries()) if (record.preimages[key] !== undefined) return record.preimages[key]
       return null
     }
-    case 'eth_getStateDb': return {
-      backend: 'monad-revm', version: 1, spec: this.options.fork, engine: this.engine.snapshot(),
-      keys: [...this.wallets.values()].map(wallet => wallet.privateKey), blocks: this.blocks, executions: [...this.executions]
-    }
+    case 'eth_getStateDb': return JSON.parse(JSON.stringify({
+      backend: 'monad-revm', version: 2, spec: this.options.fork, engine: this.engine.snapshot(),
+      keys: [...this.wallets.values()].map(wallet => wallet.privateKey), blocks: this.blocks, executions: [...this.executions],
+      history: this.history.entries(), tags: [...this.tags], callCounter: this.callCounter
+    }))
     case 'eth_getBlocksData': return { blocks: [], latestBlockNumber: this.blocks.length - 1, baseBlockNumber: '0x0' }
     case 'personal_sign': case 'eth_sign': {
       const [data, address] = method === 'personal_sign' ? params : [params[1], params[0]]
