@@ -17,7 +17,7 @@ concurrency:
 jobs:
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       NX_NO_CLOUD: 'true'
       NX_DAEMON: 'false'
