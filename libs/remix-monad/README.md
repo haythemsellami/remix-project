@@ -60,6 +60,8 @@ Monad charges the submitted transaction gas limit. Receipts use `tx_gas_used()`;
 
 State export contains the engine snapshot, local development keys, blocks, receipts, execution history and call metadata. Restore validates saved state and preserves debugging records; reset creates a fresh engine. See [save, reset and restore](docs/state.md) for saved-state compatibility.
 
+The Solidity Unit Testing plugin uses the selected Monad VM. Test results and contract executions include Hardhat console output, and test transactions and simulated calls can be opened in the debugger. See [Solidity tests and console output](docs/unit-testing.md).
+
 ## Current coverage and limits
 
 Native Rust and packed-installation tests live with `monad-revmjs`. This repository's WASM integration tests consume the installed package, compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.
@@ -67,7 +69,7 @@ Native Rust and packed-installation tests live with `monad-revmjs`. This reposit
 This is the first local execution and debugging slice. Remaining work includes:
 
 - Remote RPC forking, historical `eth_call`, and canonical replay context, including reserve-balance metadata and staking system inputs.
-- Access-list, authorization and blob transaction workflows; Hardhat console decoding; routing Remix Solidity unit tests and the CLI to this backend.
+- Access-list, authorization and blob transaction workflows; routing the Remix test CLI to this backend.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
 - Broader precompile and nested-call conformance tests, cancellation, and registry release automation. The engine repository's CI builds and tests the npm archive.

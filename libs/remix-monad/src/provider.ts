@@ -3,6 +3,7 @@ import type { ExecuteRequest } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
 import { readState, RecordedExecution } from './state'
+import { decodeConsoleCalls } from './console'
 
 const CHAIN_ID = 1337
 const GAS_LIMIT = 30_000_000
@@ -311,7 +312,7 @@ export class MonadProvider {
     }
     case 'eth_registerCallId': this.callId = params[0]; return null
     case 'eth_getHashFromTagBySimulator': return this.tags.get(String(params[0])) || null
-    case 'eth_getHHLogsForTx': return []
+    case 'eth_getHHLogsForTx': return decodeConsoleCalls(this.executions.get(params[0])?.result.consoleCalls)
     case 'eth_getExecutionResultFromSimulator': {
       const { result } = this.recorded(params[0])
       return { returnValue: result.returnValue, executionGasUsed: toQuantity(result.gasSpent), gas: toQuantity(result.gasUsed), gasRefund: '0x0',
