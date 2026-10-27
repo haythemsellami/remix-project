@@ -27,6 +27,8 @@ Signing tests compare EIP-712 signatures with ethers and recover them through th
 
 [FactoryDeployments.sol](../examples/FactoryDeployments.sol) covers Remix's automatic library deployment and linking, `CREATE` and `CREATE2` child addresses, constructor arguments, value transfers, storage and events. Provider tests verify constructor reverts and address collisions leave no child state changes or logs, while their execution remains debuggable. Browser scenarios on both Monad forks attach a child through **Deployed Contracts → Add Contract** (the At Address workflow), execute its linked library, and navigate successful and reverted constructors with source highlighting and decoded storage.
 
+[PrecompileCalls.sol](../examples/PrecompileCalls.sol) covers SHA-256, signature recovery, BN254, KZG, BLS12-381 and P-256 through the provider on both forks. Tests check known outputs, gas, return-data memory, source locations, simulation isolation and caught/propagated failures. Browser scenarios execute SHA-256 and P-256, catch invalid curve inputs and insufficient gas, and inspect a reverted caller write. Precompiles have no bytecode frame: instruction stepping stays in the caller across `STATICCALL`. The engine repository separately compares all stateless precompiles between native default crypto and the packed WASM package. The Monad CI job allows 45 minutes for the build and expanded browser suite.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh

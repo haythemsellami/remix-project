@@ -76,7 +76,7 @@ This is the first local execution and debugging slice. Remaining work includes:
 - Access-list, authorization and blob transaction workflows; routing the Remix test CLI to this backend.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
-- Broader precompile and nested-call conformance tests, cancellation, and registry release automation. The engine repository's CI builds and tests the npm archive.
+- Stateful system-contract conformance tests, cancellation, and registry release automation. Stateless precompile parity runs in the engine repository; [Remix precompile debugging](docs/testing.md) runs on both Monad forks.
 
 Blocks and receipts are synthetic local records. State, transaction and receipt roots and blooms are placeholders; they are not cryptographic proofs or full-node RPC equivalents. Calls have separate synthetic records for debugging and do not alter canonical local blocks or committed state. Unsupported RPC methods return an explicit error.
 
