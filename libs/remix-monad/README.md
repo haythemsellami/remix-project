@@ -62,6 +62,8 @@ State export contains the engine snapshot, local development keys, blocks, recei
 
 The Solidity Unit Testing plugin uses the selected Monad VM. Test results and contract executions include Hardhat console output, and test transactions and simulated calls can be opened in the debugger. See [Solidity tests and console output](docs/unit-testing.md).
 
+JavaScript and TypeScript scripts use the selected Monad provider through Remix's Ethers v6 runner. The provider supports message and EIP-712 signing, including the file explorer's signing action. See [scripts and signing](docs/scripts-and-signing.md) for examples and debugging instructions.
+
 ## Current coverage and limits
 
 Native Rust and packed-installation tests live with `monad-revmjs`. This repository's WASM integration tests consume the installed package, compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.

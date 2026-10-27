@@ -23,6 +23,8 @@ Saved-state tests cover accounts and execution records, call-hash continuity, ol
 
 Solidity runner tests cover hooks, passing/failing assertions, reverted transactions, read-only results, sender/value annotations, and fork-specific opcode execution. Browser scenarios verify the existing plugin's results and Debug buttons, source stepping, decoded storage, and console output in the terminal. Provider tests also cover legacy console signatures, malformed payloads, console output after trace truncation, and save/restore compatibility.
 
+Signing tests compare EIP-712 signatures with ethers and recover them through the WASM precompile. They cover object/JSON payloads, nested arrays, integer boundaries, domain separation, RPC errors, message bytes, and restored account keys. Browser scenarios run JavaScript and TypeScript files through the published Ethers v6 runner, use the file-explorer signing action, and debug script storage writes and opcode transactions on both Monad forks. Browser setup downloads a pinned, checksum-verified runner into `tmp/monad-script-runner`; later runs reuse the cached files. The runner's source revision and asset checksums are recorded in `tests/monad/script-runner.ts`.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh

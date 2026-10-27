@@ -1,4 +1,6 @@
 import { getAddress, getBytes, keccak256, toQuantity, toUtf8Bytes, Transaction, Wallet, ZeroAddress, ZeroHash } from 'ethers'
+import { signTypedData, SignTypedDataVersion } from '@metamask/eth-sig-util'
+import { Buffer } from 'buffer'
 import type { ExecuteRequest } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
@@ -336,6 +338,25 @@ export class MonadProvider {
       tags: [...this.tags], callCounter: this.callCounter
     }))
     case 'eth_getBlocksData': return { blocks: [], latestBlockNumber: this.blocks.length - 1, baseBlockNumber: '0x0' }
+    case 'eth_signTypedData': case 'eth_signTypedData_v4': {
+      try {
+        const wallet = this.wallets.get(getAddress(params[0]).toLowerCase())
+        if (!wallet) throw new Error('Unknown local account')
+        const data = typeof params[1] === 'string' ? JSON.parse(params[1]) : params[1]
+        for (const field of ['types', 'domain', 'message']) {
+          if (!data?.[field] || typeof data[field] !== 'object' || Array.isArray(data[field])) {
+            throw new Error(`Typed data ${field} must be an object`)
+          }
+        }
+        if (!Array.isArray(data.types.EIP712Domain)) throw new Error('Typed data must define EIP712Domain')
+        if (typeof data.primaryType !== 'string' || !Array.isArray(data.types[data.primaryType])) {
+          throw new Error('Typed data must define its primaryType')
+        }
+        return signTypedData({ privateKey: Buffer.from(getBytes(wallet.privateKey)), data, version: SignTypedDataVersion.V4 })
+      } catch (error) {
+        throw new RpcError(error.message || 'Invalid typed data')
+      }
+    }
     case 'personal_sign': case 'eth_sign': {
       const [data, address] = method === 'personal_sign' ? params : [params[1], params[0]]
       const wallet = this.wallets.get(getAddress(address).toLowerCase())
