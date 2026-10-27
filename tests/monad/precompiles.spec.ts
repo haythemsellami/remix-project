@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test, selectEnvironment, deploy, debugTransaction, showOpcodes, currentOpcode, step, openContract, transact, readValue, contractFunction } from './helpers'
 
 test.use({ contractFile: 'PrecompileCalls.sol' })
-// Five transactions exercise successful calls, caught failures and a caller revert.
+// Compile, deploy and navigate several precompile transactions in each scenario.
 test.describe.configure({ timeout: 300_000 })
 const source = readFileSync('libs/remix-monad/examples/PrecompileCalls.sol', 'utf8')
 const callLine = source.split('\n').findIndex(line => line.includes('(success, output) = target.staticcall')) + 1
@@ -19,7 +19,7 @@ async function selectFunction(page: Page, name: string) {
 }
 
 async function untilOpcode(page: Page, opcode: string) {
-  for (let i = 0; i < 120 && !new RegExp(`\\b${opcode}\\b`).test(await currentOpcode(page).innerText()); i++) await step(page, 'forward')
+  for (let i = 0; i < 240 && !new RegExp(`\\b${opcode}\\b`).test(await currentOpcode(page).innerText()); i++) await step(page, 'forward')
   await expect(currentOpcode(page)).toContainText(opcode)
 }
 
@@ -30,7 +30,7 @@ async function reachPrecompile(page: Page) {
   const line = page.locator(`#editorView .highlightLine${callLine}:visible`).first()
   const highlight = page.locator('#editorView [class*="highlightLine"]').first()
   await expect(highlight).toBeAttached()
-  for (let i = 0; i < 40 && !await line.isVisible(); i++) {
+  for (let i = 0; i < 80 && !await line.isVisible(); i++) {
     const header = page.locator('[data-id="callTraceHeader"]')
     const before = await header.innerText()
     await page.locator('[data-id="btnStepInto"]').click()
@@ -55,7 +55,7 @@ async function decodedValue(page: Page, value: number) {
 }
 
 for (const fork of ['monad-ten', 'monad-next'] as const) {
-  test(`${fork}: debug precompile return data, rejected inputs, gas exhaustion and caller rollback`, async ({ page }) => {
+  test(`${fork}: debug precompile return data, rejected inputs and gas exhaustion`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page, 'PrecompileCalls')
 
@@ -96,21 +96,28 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
         await page.getByRole('button', { name: 'Stop debugging', exact: true }).click()
       })
     }
+  })
 
+  test(`${fork}: debug caller rollback after precompile failure`, async ({ page }) => {
+    await selectEnvironment(page, fork)
+    await deploy(page, 'PrecompileCalls')
+    await openContract(page)
+    await transact(page, 'invalidPoint')
+    await readValue(page, 11)
     await test.step('A caller revert rolls back state while its trace remains inspectable', async () => {
-      await openContract(page)
-      await page.getByText('auto', { exact: true }).click()
-      await page.getByPlaceholder('3000000', { exact: true }).fill('3000000')
+      const contracts = page.locator('#udappDeployedContractsComponent')
+      await contracts.getByText('auto', { exact: true }).click()
+      const gas = contracts.locator('.position-relative').filter({ has: page.getByText('custom', { exact: true }) })
+      await expect(gas.getByRole('spinbutton')).toHaveValue('3000000')
       const transaction = await transact(page, 'requireValidPoint')
       await readValue(page, 11)
       await debugTransaction(page, transaction, 'Failed')
-      const caller = await selectFunction(page, 'requireValidPoint')
+      await selectFunction(page, 'requireValidPoint')
       await reachPrecompile(page)
       await step(page, 'forward')
       await decodedValue(page, 99)
       await showOpcodes(page)
-      await caller.locator('button').filter({ has: page.locator('i.fa-step-forward') }).click()
-      await expect(currentOpcode(page)).toContainText('REVERT')
+      await untilOpcode(page, 'REVERT')
       await decodedValue(page, 99)
     })
   })
