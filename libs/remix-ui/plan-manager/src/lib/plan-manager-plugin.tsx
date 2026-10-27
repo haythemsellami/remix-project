@@ -4237,7 +4237,6 @@ function findAccessGroupForPlan(plan: any, groups: FeatureGroup[]): FeatureGroup
   return [...matches].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0]
 }
 
-
 /**
  * One line of a localized cart price preview (per Paddle line item).
  * Amounts are in the currency's minor units (e.g. cents); the `formatted*`
