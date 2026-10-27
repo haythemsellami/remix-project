@@ -230,7 +230,7 @@
     "latest-version": "^5.1.0",
     "lunr": "^2.3.9",
     "merge": "^2.1.1",
-    "monad-revmjs": "https://github.com/category-labs/monad-revm.git#ccfb63068cbb66e76a0e244347158263999d3e82",
+    "monad-revmjs": "https://github.com/category-labs/monad-revm.git#a22dd0902d75c5921bf962b05c6f210a48728c42",
     "npm-install-version": "^6.0.2",
     "octokit": "^5.0.5",
     "path-browserify": "^1.0.1",

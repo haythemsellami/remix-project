@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { test, selectEnvironment, showOpcodes, currentOpcode, step } from './helpers'
 
 test.use({ contractFile: 'MonadUnit_test.sol' })
+// Each scenario compiles the suite and steps through five debugger sessions.
+test.describe.configure({ timeout: 180_000 })
 const storeLine = readFileSync('libs/remix-monad/examples/MonadUnit_test.sol', 'utf8').split('\n').findIndex(line => line.includes('value = value + 1;')) + 1
 
 for (const fork of ['monad-next', 'monad-ten'] as const) {
