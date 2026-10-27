@@ -1,7 +1,8 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import solc from 'solc'
+import { prepareScriptRunner } from './script-runner'
 
-export default function setup() {
+export default async function setup() {
   if (!existsSync('dist/apps/remix-ide/index.html')) {
     throw new Error('Build Remix before running the browser tests: yarn nx build remix-ide --configuration=development')
   }
@@ -17,4 +18,5 @@ export default function setup() {
     releases: { [version]: path },
     latestRelease: version
   }))
+  await prepareScriptRunner()
 }
