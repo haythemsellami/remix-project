@@ -29,6 +29,8 @@ Signing tests compare EIP-712 signatures with ethers and recover them through th
 
 [PrecompileCalls.sol](../examples/PrecompileCalls.sol) covers SHA-256, signature recovery, BN254, KZG, BLS12-381 and P-256 through the provider on both forks. Tests check known outputs, gas, return-data memory, source locations, simulation isolation and caught/propagated failures. Browser scenarios execute SHA-256 and P-256, catch invalid curve inputs and insufficient gas, and inspect a reverted caller write. Precompiles have no bytecode frame: instruction stepping stays in the caller across `STATICCALL`. The engine repository separately compares all stateless precompiles between native default crypto and the packed WASM package. The Monad CI job allows 60 minutes for dependency/browser installation, the build and the expanded browser suite.
 
+[DelegatedAccount.sol](../examples/DelegatedAccount.sol) and [delegated-transactions.js](../examples/delegated-transactions.js) cover access lists, signed authorizations, caller rollback and revocation. Provider tests check simulation isolation, local reserve history and saved-state debugging. Browser scenarios use the account delegation controls and Ethers script runner on both Monad forks, then inspect source, storage and failures after revocation. The wrapper separately compares typed-transaction fixtures between native and WASM.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh

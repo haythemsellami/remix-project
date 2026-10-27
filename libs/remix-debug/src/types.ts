@@ -60,6 +60,8 @@ export interface StructLog {
 export interface DebugTraceTransactionResult {
   /** Explicit execution specification supplied by a local Monad provider. */
   fork?: 'monad-ten' | 'monad-next';
+  /** Transaction-specific runtime code supplied by the local Monad provider. */
+  codeByAddress?: Record<string, string>;
   /** True if the transaction execution failed (reverted). */
   failed: boolean;
   /** The total gas consumed by the transaction (hex-encoded). */
