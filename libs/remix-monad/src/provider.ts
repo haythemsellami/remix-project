@@ -6,6 +6,7 @@ import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } f
 import { RpcError } from './types'
 import { readState, RecordedExecution } from './state'
 import { decodeConsoleCalls } from './console'
+import { decodeDelegatedTransaction, signDelegatedTransaction, SignedEnvelope } from './transaction'
 
 const CHAIN_ID = 1337
 const GAS_LIMIT = 30_000_000
@@ -155,7 +156,7 @@ export class MonadProvider {
       const nonce = BigInt(auth.nonce)
       const chainId = BigInt(auth.chainId)
       const yParity = Number(BigInt(signature.yParity ?? signature.v))
-      if (nonce < 0n || nonce > 0xffffffffffffffffn || chainId < 0n || chainId >= (1n << 256n) || ![0, 1].includes(yParity)) throw new RpcError('Invalid authorization quantity')
+      if (nonce < 0n || nonce > 0xffffffffffffffffn || chainId < 0n || chainId >= (1n << 256n) || !Number.isInteger(yParity) || yParity < 0 || yParity > 255) throw new RpcError('Invalid authorization quantity')
       return { chainId: toQuantity(chainId), address: getAddress(auth.address), nonce: toQuantity(nonce), yParity,
         r: signature.r, s: signature.s }
     })
@@ -202,7 +203,7 @@ export class MonadProvider {
     return JSON.parse(this.engine.execute(JSON.stringify(execution)))
   }
 
-  private async execute(input: any, commit: boolean, signed?: Transaction) {
+  private async execute(input: any, commit: boolean, signed?: SignedEnvelope) {
     const tx = this.normalize(input)
     const latest = this.blocks[this.blocks.length - 1]
     const blockNumber = commit ? this.blocks.length : this.blocks.length - 1
@@ -212,12 +213,11 @@ export class MonadProvider {
       if (!signed) {
         const wallet = this.wallets.get(tx.from.toLowerCase())
         if (!wallet) throw new RpcError('Unknown local account')
-        signed = Transaction.from(await wallet.signTransaction({
+        signed = tx.type === 4 ? signDelegatedTransaction(tx, wallet.privateKey, CHAIN_ID) : Transaction.from(await wallet.signTransaction({
           to: tx.to, data: tx.data, value: tx.value, nonce: tx.nonce, gasLimit: tx.gas,
           chainId: CHAIN_ID, type: tx.type,
-          ...(tx.type === 2 || tx.type === 4 ? { maxFeePerGas: tx.gasPrice, maxPriorityFeePerGas: tx.priorityFee } : { gasPrice: tx.gasPrice }),
-          ...(tx.type !== 0 ? { accessList: tx.accessList } : {}),
-          ...(tx.type === 4 ? { authorizationList: tx.authorizationList.map(auth => ({ ...auth, signature: { r: auth.r, s: auth.s, yParity: auth.yParity } })) } : {})
+          ...(tx.type === 2 ? { maxFeePerGas: tx.gasPrice, maxPriorityFeePerGas: tx.priorityFee } : { gasPrice: tx.gasPrice }),
+          ...(tx.type !== 0 ? { accessList: tx.accessList } : {})
         }))
       }
       hash = signed.hash
@@ -324,10 +324,13 @@ export class MonadProvider {
     case 'eth_estimateGas': return this.estimate(params[0])
     case 'eth_sendTransaction': return this.execute(params[0], true)
     case 'eth_sendRawTransaction': {
+      if (getBytes(params[0])[0] === 4) {
+        const { input, signed } = decodeDelegatedTransaction(params[0], CHAIN_ID)
+        return this.execute(input, true, signed)
+      }
       const tx = Transaction.from(params[0])
       if (!tx.isSigned() || !tx.from) throw new RpcError('Invalid signed transaction')
-      // ethers 6.14's Transaction.toJSON omits the authorization list.
-      return this.execute({ ...tx.toJSON(), authorizationList: tx.authorizationList, from: tx.from, gas: tx.gasLimit }, true, tx)
+      return this.execute({ ...tx.toJSON(), from: tx.from, gas: tx.gasLimit }, true, tx)
     }
     case 'eth_call':
       if (params[1] && params[1] !== 'latest' && params[1] !== 'pending') throw new RpcError('Historical eth_call is not supported in this local slice')

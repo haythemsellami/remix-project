@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
-import { BrowserProvider, Interface, Wallet, hexlify, parseEther, toQuantity, ZeroAddress, ZeroHash } from 'ethers'
+import { BrowserProvider, Interface, Transaction, Wallet, concat, decodeRlp, encodeRlp, hexlify, keccak256, parseEther, toBeArray, toQuantity, ZeroAddress, ZeroHash } from 'ethers'
 import init, { Engine } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise delegated execution through the IDE debugger. */
-import { extendProvider } from '../../remix-debug/src/init'
+import { extendProvider, getTransactionForDebugging } from '../../remix-debug/src/init'
 import { Ethdebugger } from '../../remix-debug/src/Ethdebugger'
 import { CompilerAbstract } from '@remix-project/remix-solidity'
 import { convertOffsetToLineColumn, getLinebreakPositions } from '../../remix-debug/src/source/sourceMappingDecoder'
@@ -47,7 +47,7 @@ async function fixture(fork: 'monad-ten' | 'monad-next', stateDb?: any) {
       instance.callTree.event.register('callTreeBuildFailed', reject)
       instance.callTree.event.register('callTreeNotReady', reject)
     })
-    await instance.debug((await web3.getTransaction(hash)).toJSON())
+    await instance.debug((await getTransactionForDebugging(web3, hash)).toJSON())
     await ready
     return instance
   }
@@ -70,7 +70,64 @@ async function inspectStore(f: Awaited<ReturnType<typeof fixture>>, hash: string
   return debug
 }
 
+test('the Monad debugger transaction fallback preserves errors from other providers', async () => {
+  const error = Object.assign(new Error('Invalid authorization format'), { code: 'BAD_DATA', value: { type: '0x4', authorizationList: []} })
+  const provider = { getTransaction: async () => { throw error }, send: async method => {
+    assert.equal(method, 'web3_clientVersion')
+    return 'Ethereum/test-client'
+  } }
+  await assert.rejects(getTransactionForDebugging(provider, ZeroHash), caught => caught === error)
+  provider.send = async () => { throw new Error('Unsupported RPC method') }
+  await assert.rejects(getTransactionForDebugging(provider, ZeroHash), caught => caught === error)
+})
+
 for (const fork of ['monad-ten', 'monad-next'] as const) {
+  test(`${fork}: invalid authorization signatures are skipped without rejecting signed or unlocked transactions`, async () => {
+    const f = await fixture(fork)
+    try {
+      const target = await f.deploy()
+      for (const raw of [true, false]) {
+        const authorization = await f.authorize(target)
+        const valid = { chainId: toQuantity(authorization.chainId), address: authorization.address, nonce: toQuantity(authorization.nonce),
+          yParity: authorization.signature.yParity, r: authorization.signature.r, s: authorization.signature.s }
+        const highS = '0x' + 'ff'.repeat(32)
+        const authorizations = [{ ...valid, yParity: 2 }, { ...valid, s: highS }, valid]
+        const input = { to: f.authority, type: 4, data: abi.encodeFunctionData('store', [42]), gasLimit: 30_000_000,
+          chainId: 1337, nonce: await f.nonce(f.payer), maxFeePerGas: 1_000_000_000, maxPriorityFeePerGas: 1_000_000_000 }
+        const before = f.engine.snapshot()
+        await f.request('eth_call', { ...input, from: f.payer, authorizationList: authorizations })
+        await assert.rejects(f.request('eth_sendTransaction', { ...input, from: f.payer, authorizationList: [{ ...valid, yParity: 256 }]}), /authorization quantity/)
+        assert.equal(f.engine.snapshot(), before)
+        let hash: string
+        if (raw) {
+          // Sign the envelope independently: ethers rejects these inner signatures before Rust sees them.
+          const tx = Transaction.from({ ...input, authorizationList: [authorization]})
+          const fields = decodeRlp('0x' + tx.unsignedSerialized.slice(4)) as any[]
+          const quantity = value => hexlify(toBeArray(value))
+          fields[9] = authorizations.map(auth => [quantity(auth.chainId), auth.address, quantity(auth.nonce), quantity(auth.yParity), quantity(auth.r), quantity(auth.s)])
+          const signature = f.payerWallet.signingKey.sign(keccak256(concat(['0x04', encodeRlp(fields)])))
+          const encoded = concat(['0x04', encodeRlp([...fields, quantity(signature.yParity), quantity(signature.r), quantity(signature.s)])])
+          const noncanonical = concat(['0x04', encodeRlp(['0x000539', ...fields.slice(1), quantity(signature.yParity), quantity(signature.r), quantity(signature.s)])])
+          await assert.rejects(f.request('eth_sendRawTransaction', noncanonical), /Noncanonical/)
+          await assert.rejects(f.request('eth_sendRawTransaction', tx.unsignedSerialized), /Invalid signed/)
+          hash = await f.request('eth_sendRawTransaction', encoded)
+          assert.equal(hash, keccak256(encoded))
+        } else {
+          hash = await f.request('eth_sendTransaction', { ...input, from: f.payer, authorizationList: authorizations })
+        }
+        assert.equal((await f.request('eth_getTransactionReceipt', hash)).status, '0x1')
+        const tx = await f.request('eth_getTransactionByHash', hash)
+        assert.equal(tx.authorizationList[0].yParity, '0x2')
+        assert.equal(tx.authorizationList[1].s, highS)
+        assert.equal(tx.authorizationList.length, 3)
+        assert.deepEqual((await getTransactionForDebugging(f.web3, hash)).toJSON().authorizationList, tx.authorizationList)
+        assert.equal(await f.nonce(f.authority), raw ? 1 : 2)
+        assert.equal(await f.request('eth_getCode', f.authority), '0xef0100' + target.slice(2).toLowerCase())
+        await inspectStore(f, hash, 42)
+      }
+    } finally { f.close() }
+  })
+
   test(`${fork}: typed calls, signed transactions, delegation and historical source debugging`, { timeout: 30_000 }, async () => {
     const f = await fixture(fork)
     let restored: Awaited<ReturnType<typeof fixture>>

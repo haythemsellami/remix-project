@@ -2,6 +2,8 @@
 
 Both Monad environments support transaction types 0, 1, 2 and 4 through `eth_sendTransaction`, `eth_sendRawTransaction`, `eth_call` and `eth_estimateGas`. Access lists and signed authorization tuples reach Rust unchanged in meaning; the engine validates and executes them. Transaction responses retain their type and lists. Calls and estimates leave committed state unchanged.
 
+Type-4 envelope encoding and outer-signature checks use Remix's existing EthereumJS transaction utility. Prague enables that envelope format without imposing Ethereum Osaka's transaction gas cap; the provider and Rust enforce Monad gas rules. The codec preserves tuples that ethers cannot represent, including invalid parity and signature scalars; Rust decides which tuples to skip. The debugger can read those local Monad transactions directly from RPC if ethers rejects their formatting. Ethereum providers keep their existing behavior.
+
 Compile [DelegatedAccount.sol](../examples/DelegatedAccount.sol) for Cancun and deploy it. In the selected account's menu, choose **Authorize Delegation** and enter the implementation address. Remix adds a delegated instance to **Deployed Contracts**. Call `store(42)` there: storage and events belong to the account, while the implementation supplies the code. Remove delegation using the account's delegation badge.
 
 [delegated-transactions.js](../examples/delegated-transactions.js), run with Ethers v6 after compilation, signs and submits a type-4 transaction, a type-1 access-list transaction, a reverted call and a revocation. It prints the transaction hashes for debugging. The fixture exposes unrestricted methods for local testing.

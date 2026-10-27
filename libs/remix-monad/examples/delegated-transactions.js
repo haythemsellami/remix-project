@@ -13,12 +13,19 @@ const target = await implementation.getAddress()
 const chainId = (await provider.getNetwork()).chainId
 const abi = implementation.interface
 const authorization = await authorityWallet.authorize({ address: target, chainId, nonce: 0 })
-const signed = await payerWallet.signTransaction({
+const delegated = ethers.Transaction.from({
   type: 4, chainId, nonce: await provider.getTransactionCount(payer), to: authority,
   data: abi.encodeFunctionData('store', [42]), gasLimit: 3000000,
   maxFeePerGas: 2000000000, maxPriorityFeePerGas: 1000000000,
   authorizationList: [authorization], accessList: [{ address: authority, storageKeys: [ethers.ZeroHash] }]
 })
+// Include skipped signatures before the valid authorization without asking ethers to interpret them.
+const fields = ethers.decodeRlp('0x' + delegated.unsignedSerialized.slice(4))
+const tuple = fields[9][0]
+fields[9] = [[...tuple.slice(0, 3), '0x02', ...tuple.slice(4)], [...tuple.slice(0, 5), '0x' + 'ff'.repeat(32)], tuple]
+const signature = payerWallet.signingKey.sign(ethers.keccak256(ethers.concat(['0x04', ethers.encodeRlp(fields)])))
+const quantity = value => ethers.hexlify(ethers.toBeArray(value))
+const signed = ethers.concat(['0x04', ethers.encodeRlp([...fields, quantity(signature.yParity), quantity(signature.r), quantity(signature.s)])])
 const delegatedHash = await provider.send('eth_sendRawTransaction', [signed])
 const accessSigned = await payerWallet.signTransaction({
   type: 1, chainId, nonce: await provider.getTransactionCount(payer), to: authority,
