@@ -19,6 +19,8 @@ All three environments (Monad Next, Monad Ten, and Ethereum Osaka) exercise depl
 
 The [NestedCalls.sol](../examples/NestedCalls.sol) fixture covers nested calls and failure paths. Provider tests check `CALLSTACKDEPTH` and `CALLERN` through `CALL`, `STATICCALL`, and `DELEGATECALL`, calldata and return decoding, delegated storage, caught and propagated reverts, out-of-gas, and invalid extensions. They also check descendant rollback, source call-tree boundaries, and preservation of engine gas costs. Browser tests select nested calls in the call tree and verify source highlighting, decoded storage, and navigation across a revert; Monad Next additionally navigates the raw-bytecode probe. The workflow runs existing Ethereum debugger and storage-decoder regressions alongside these checks.
 
+Saved-state tests cover accounts and execution records, call-hash continuity, older version 1 saves, detached imports and exports, malformed state, and fresh resets. Browser scenarios on Monad Next and Ten use the existing state-fork and reset controls, reopen a saved session, debug a saved Solidity storage write, and execute a new transaction. See [save, reset and restore](state.md) for the persistence contract.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh

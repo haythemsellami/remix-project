@@ -58,7 +58,7 @@ This local chain has ID **1337**, five funded development accounts with **100 MO
 
 Monad charges the submitted transaction gas limit. Receipts use `tx_gas_used()`; consumption uses `total_gas_spent()`. Estimation searches for a successful gas limit without committing state. Gas-sensitive contracts can be non-monotonic, so estimation is not a guarantee that a different future state will execute identically.
 
-State export contains the engine snapshot, local development keys, blocks, receipts and recorded execution history. Restore validates the engine version, chain ID and specification. Remix's environment reset creates a new engine or restores the chosen snapshot.
+State export contains the engine snapshot, local development keys, blocks, receipts, execution history and call metadata. Restore validates saved state and preserves debugging records; reset creates a fresh engine. See [save, reset and restore](docs/state.md) for saved-state compatibility.
 
 ## Current coverage and limits
 

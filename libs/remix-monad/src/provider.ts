@@ -2,6 +2,7 @@ import { getAddress, getBytes, keccak256, toQuantity, toUtf8Bytes, Transaction, 
 import type { ExecuteRequest } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
+import { readState, RecordedExecution } from './state'
 
 const CHAIN_ID = 1337
 const GAS_LIMIT = 30_000_000
@@ -16,18 +17,9 @@ const KEYS = [
   'f49bf239b6e554fdd08694fde6c67dac4d01c04e0dda5ee11abee478983f3bc0'
 ]
 
-interface RecordedExecution {
-  tx: any
-  receipt: any
-  block: any
-  result: EngineResult
-  before: string
-  after: string
-}
-
 export interface MonadProviderOptions {
   fork: MonadSpec
-  stateDb?: { backend: string, version: number, spec: MonadSpec, engine: string, keys: string[], blocks: any[], executions: [string, RecordedExecution][] }
+  stateDb?: unknown
 }
 
 /** Local, serial execution provider. No requests are broadcast to a network. */
@@ -41,6 +33,7 @@ export class MonadProvider {
   private callCounter = 0
   private queue: Promise<unknown> = Promise.resolve()
   private initialized = false
+  readonly options: MonadProviderOptions
 
   readonly Accounts = {
     _addAccount: (key: string, balance = BALANCE) => this.addAccount(key, balance),
@@ -49,7 +42,8 @@ export class MonadProvider {
     }
   }
 
-  constructor(readonly options: MonadProviderOptions, engine?: MonadEngine) {
+  constructor(options: MonadProviderOptions, engine?: MonadEngine) {
+    this.options = { ...options }
     this.engine = engine
   }
 
@@ -59,23 +53,26 @@ export class MonadProvider {
       await wasm.default()
       this.engine = new wasm.Engine(this.options.fork, CHAIN_ID)
     }
-    const state = this.options.stateDb
-    if (state) {
-      if (state.backend !== 'monad-revm' || state.version !== 1 || state.spec !== this.options.fork) {
-        throw new RpcError('Saved state belongs to a different backend or Monad specification')
-      }
-      this.engine.restore(state.engine)
+    const stateDb = this.options.stateDb
+    if (stateDb !== undefined) {
+      const state = readState(stateDb, this.options.fork)
+      const wallets = new Map<string, Wallet>()
       for (const key of state.keys) {
         const wallet = new Wallet(key)
-        this.wallets.set(wallet.address.toLowerCase(), wallet)
+        wallets.set(wallet.address.toLowerCase(), wallet)
       }
+      this.engine.restore(state.engine)
+      this.wallets = wallets
       this.blocks = state.blocks
       this.executions = new Map(state.executions)
+      this.tags = new Map(state.tags)
+      this.callCounter = state.callCounter
     } else {
       for (const key of KEYS) this.addAccount(key)
       this.blocks.push(this.makeBlock(0, ZeroHash, [], 0))
       this.engine.set_block_hash(0, this.blocks[0].hash)
     }
+    delete this.options.stateDb
     this.initialized = true
   }
 
@@ -324,7 +321,7 @@ export class MonadProvider {
       const { result } = this.recorded(params[0])
       if (result.traceTruncated) throw new RpcError('Trace exceeded the local limit (100,000 steps or 32 MiB); use a smaller transaction', -32000)
       return { failed: !result.success, gas: toQuantity(result.gasUsed), returnValue: result.returnValue, return: result.returnValue,
-        fork: this.options.fork, structLogs: result.structLogs.map(step => ({ ...step, memory: getBytes('0x' + step.memory) })) }
+        fork: this.options.fork, structLogs: result.structLogs.map(step => ({ ...step, stack: [...step.stack], memory: getBytes('0x' + step.memory) })) }
     }
     case 'debug_storageRangeAt': return this.storageRange(params)
     case 'debug_preimage': {
@@ -332,10 +329,11 @@ export class MonadProvider {
       for (const { result } of this.executions.values()) if (result.preimages[key] !== undefined) return result.preimages[key]
       return null
     }
-    case 'eth_getStateDb': return {
+    case 'eth_getStateDb': return JSON.parse(JSON.stringify({
       backend: 'monad-revm', version: 1, spec: this.options.fork, engine: this.engine.snapshot(),
-      keys: [...this.wallets.values()].map(wallet => wallet.privateKey), blocks: this.blocks, executions: [...this.executions]
-    }
+      keys: [...this.wallets.values()].map(wallet => wallet.privateKey), blocks: this.blocks, executions: [...this.executions],
+      tags: [...this.tags], callCounter: this.callCounter
+    }))
     case 'eth_getBlocksData': return { blocks: [], latestBlockNumber: this.blocks.length - 1, baseBlockNumber: '0x0' }
     case 'personal_sign': case 'eth_sign': {
       const [data, address] = method === 'personal_sign' ? params : [params[1], params[0]]
