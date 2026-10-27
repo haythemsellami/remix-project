@@ -25,6 +25,8 @@ Solidity runner tests cover hooks, passing/failing assertions, reverted transact
 
 Signing tests compare EIP-712 signatures with ethers and recover them through the WASM precompile. They cover object/JSON payloads, nested arrays, integer boundaries, domain separation, RPC errors, message bytes, and restored account keys. Browser scenarios run JavaScript and TypeScript files through the published Ethers v6 runner, use the file-explorer signing action, and debug script storage writes and opcode transactions on both Monad forks. Browser setup downloads a pinned, checksum-verified runner into `tmp/monad-script-runner`; later runs reuse the cached files. The runner's source revision and asset checksums are recorded in `tests/monad/script-runner.ts`.
 
+[FactoryDeployments.sol](../examples/FactoryDeployments.sol) covers Remix's automatic library deployment and linking, `CREATE` and `CREATE2` child addresses, constructor arguments, value transfers, storage and events. Provider tests verify constructor reverts and address collisions leave no child state changes or logs, while their execution remains debuggable. Browser scenarios on both Monad forks attach a child through **Deployed Contracts → Add Contract** (the At Address workflow), execute its linked library, and navigate successful and reverted constructors with source highlighting and decoded storage.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh

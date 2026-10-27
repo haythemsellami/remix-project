@@ -64,6 +64,8 @@ The Solidity Unit Testing plugin uses the selected Monad VM. Test results and co
 
 JavaScript and TypeScript scripts use the selected Monad provider through Remix's Ethers v6 runner. The provider supports message and EIP-712 signing, including the file explorer's signing action. See [scripts and signing](docs/scripts-and-signing.md) for examples and debugging instructions.
 
+[FactoryDeployments.sol](examples/FactoryDeployments.sol) exercises linked libraries and child contracts. Deploy `FactoryDeployments` to have Remix deploy and link `LinkedValues`, then use `create` or `create2` to deploy a child. Select `FactoryChild`, open **Deployed Contracts → Add Contract**, and enter `lastChild()`'s address to interact with it. Debug the factory transaction to inspect its child constructor, or call `storeWithLibrary` on the child and debug its library call. `rejectCreate2` catches a constructor revert, leaving its failed execution available in the debugger.
+
 ## Current coverage and limits
 
 Native Rust and packed-installation tests live with `monad-revmjs`. This repository's WASM integration tests consume the installed package, compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.
