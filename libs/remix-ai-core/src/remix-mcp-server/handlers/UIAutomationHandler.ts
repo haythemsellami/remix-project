@@ -478,7 +478,11 @@ export class GetUIStateHandler extends BaseToolHandler {
     }
     state.layout = await safeCall('layout', 'getLayoutState')
     state.currentFile = await safeCall('fileManager', 'getCurrentFile')
-    state.openFiles = await safeCall('fileManager', 'getOpenedFiles')
+    // fileManager only records files opened through it; one the editor switched
+    // to by itself (an accepted RemixAI diff) is current yet missing from the map
+    const opened = Object.keys((await safeCall('fileManager', 'getOpenedFiles')) || {})
+    if (state.currentFile && !opened.includes(state.currentFile)) opened.unshift(state.currentFile)
+    state.openFiles = opened
 
     const iconState = await safeCall('menuicons', 'getPluginState')
     if (iconState) state.iconBar = iconState
