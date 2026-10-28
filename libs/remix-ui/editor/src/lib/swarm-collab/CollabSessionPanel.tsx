@@ -91,6 +91,26 @@ export const CollabSessionPanel = ({ state, onLeave, onDismissError }: CollabSes
           {state.people.length === 0 && <li className="text-muted">Nobody else yet.</li>}
         </ul>
         <button className="btn btn-sm btn-outline-danger w-100" onClick={onLeave} data-id="swarmCollabLeave">Leave session</button>
+        <div className="mt-2 text-center">
+          <button
+            type="button"
+            className="btn btn-link btn-sm p-0 text-decoration-none"
+            onClick={() => window.dispatchEvent(new CustomEvent('swarmCollabSetupGuide'))}
+            data-id="swarmCollabSetupGuide"
+          >
+            <i className="fas fa-book me-1" />Swarm setup guide
+          </button>
+          <span className="text-muted mx-1 small">or</span>
+          <a
+            href="https://docs.ethswarm.org/docs/desktop/install"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-link btn-sm p-0 text-decoration-none small"
+            data-id="swarmCollabInstallDesktop"
+          >
+            install Swarm Desktop
+          </a>
+        </div>
       </div>
     </div>
   )

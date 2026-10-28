@@ -140,13 +140,32 @@ export const SwarmCollab = ({ plugin, editorRef, monacoRef, currentFile }: Swarm
   useEffect(() => {
     const leaveHandler = () => session.leave()
     const dismissHandler = () => session.dismissError()
+    const setupGuideHandler = async () => {
+      try {
+        await (plugin as any).call('skillsexplorermodal', 'loadSkill', 'swarm-setup-bee-interactive')
+      } catch {
+        // skill endpoint unavailable — proceed without it
+      }
+      try {
+        const isPanelHidden = await plugin.call('rightSidePanel', 'isPanelHidden')
+        if (isPanelHidden) await plugin.call('rightSidePanel', 'togglePanel')
+        await plugin.call('menuicons', 'select', 'remixaiassistant')
+        await (plugin as any).call('remixaiassistant', 'newConversation')
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        await (plugin as any).call('remixaiassistant', 'chatPipe', 'guide me through the setup of a swarm node', false, { source: 'swarm-collab' })
+      } catch (err) {
+        console.error('Swarm setup guide failed:', err)
+      }
+    }
     window.addEventListener('swarmCollabLeave', leaveHandler)
     window.addEventListener('swarmCollabDismissError', dismissHandler)
+    window.addEventListener('swarmCollabSetupGuide', setupGuideHandler)
     return () => {
       window.removeEventListener('swarmCollabLeave', leaveHandler)
       window.removeEventListener('swarmCollabDismissError', dismissHandler)
+      window.removeEventListener('swarmCollabSetupGuide', setupGuideHandler)
     }
-  }, [session])
+  }, [session, plugin])
 
   // Bind the model the editor shows for the current file.
   useEffect(() => {
