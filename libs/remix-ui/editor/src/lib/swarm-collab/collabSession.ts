@@ -242,6 +242,9 @@ export class CollabSession {
     emitter.on(DOC_EVENTS.WRITE_DONE, () => this.setState({ ...this.state, saving: false }))
 
     window.addEventListener('beforeunload', this.onBeforeUnload)
+    await this.ensureBeeReachable(settings.beeUrl.trim())
+    // Left while waiting for the browser permission.
+    if (generation !== this.generation) return
     doc.start()
   }
 
@@ -289,6 +292,29 @@ export class CollabSession {
     this.binding = null
     this.sync?.setBoundPath(null)
     this.doc?.updateCursor(null)
+  }
+
+  /**
+   * Polls the Bee URL until the browser grants local-network access permission.
+   * The first fetch triggers Chrome's permission prompt; we retry until it resolves
+   * (any HTTP response = permission granted) before starting the SwarmDoc.
+   */
+  private async ensureBeeReachable(beeUrl: string): Promise<void> {
+    const TIMEOUT_MS = 15000
+    const POLL_MS = 750
+    const deadline = Date.now() + TIMEOUT_MS
+
+    while (Date.now() < deadline) {
+      try {
+        const controller = new AbortController()
+        const id = setTimeout(() => controller.abort(), 4000)
+        try { await fetch(beeUrl, { signal: controller.signal }) } finally { clearTimeout(id) }
+        return
+      } catch { /* permission not yet granted or node not reachable — retry */ }
+      await new Promise<void>((r) => setTimeout(r, POLL_MS))
+    }
+
+    throw new Error('Could not reach your Bee node. Make sure it is running and approve the browser connection prompt if one appeared.')
   }
 
   private transportFor(settings: CollabSettings): DocTransportFactory {
