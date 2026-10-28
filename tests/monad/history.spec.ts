@@ -91,6 +91,8 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await page.locator('[data-id="btnForkState"]').click()
       await expect(page.locator(`[data-id="selected-provider-vm-fs-${snapshotName}"]`)).toBeVisible()
     })
+    // The provider changes before the save action finishes updating the environment selector.
+    await expect(page.locator('[data-id="forkInput"]')).not.toBeVisible()
     await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
     await page.locator('[data-id="delete-state-icon"]').click()
     await page.locator('[data-id="btnResetState"]').click()
