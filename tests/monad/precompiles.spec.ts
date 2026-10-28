@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { test, selectEnvironment, deploy, debugTransaction, showOpcodes, currentOpcode, step, openContract, transact, readValue, contractFunction } from './helpers'
+import { test, selectEnvironment, deploy, debugTransaction, showOpcodes, currentOpcode, seekOpcode, step, openContract, transact, readValue, contractFunction } from './helpers'
 
 test.use({ contractFile: 'PrecompileCalls.sol' })
 // Compile, deploy and navigate several precompile transactions in each scenario.
@@ -18,29 +18,10 @@ async function selectFunction(page: Page, name: string) {
   return row
 }
 
-async function untilOpcode(page: Page, opcode: string) {
-  for (let i = 0; i < 240 && !new RegExp(`\\b${opcode}\\b`).test(await currentOpcode(page).innerText()); i++) await step(page, 'forward')
-  await expect(currentOpcode(page)).toContainText(opcode)
-}
-
 async function reachPrecompile(page: Page) {
   await showOpcodes(page)
-  await page.locator('.json-line').filter({ has: page.locator('.json-key', { hasText: /^opcode$/ }) }).locator('i').click()
-  await expect(page.locator('.opcodes-container')).not.toBeVisible()
-  const line = page.locator(`#editorView .highlightLine${callLine}:visible`).first()
-  const highlight = page.locator('#editorView [class*="highlightLine"]').first()
-  await expect(highlight).toBeAttached()
-  for (let i = 0; i < 80 && !await line.isVisible(); i++) {
-    const header = page.locator('[data-id="callTraceHeader"]')
-    const before = await header.innerText()
-    await page.locator('[data-id="btnStepInto"]').click()
-    await expect(header).not.toHaveText(before)
-    // Editor decorations arrive after the trace counter updates.
-    await expect(highlight).toBeAttached()
-  }
-  await expect(line).toBeVisible()
-  await showOpcodes(page)
-  await untilOpcode(page, 'STATICCALL')
+  await seekOpcode(page, 'STATICCALL')
+  await expect(page.locator(`#editorView .highlightLine${callLine}`).first()).toBeVisible()
 }
 
 async function decodedValue(page: Page, value: number) {
@@ -85,7 +66,7 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
         await expect(page.locator(`#editorView .highlightLine${callLine}`).first()).toBeVisible()
         await step(page, 'forward')
         if (success) {
-          await untilOpcode(page, 'RETURNDATACOPY')
+          await seekOpcode(page, 'RETURNDATACOPY')
           await step(page, 'forward')
           const toggle = page.locator('[data-id="memory-expand-icon"]')
           if ((await toggle.getAttribute('class')).includes('fa-plus-square')) await toggle.click()
@@ -117,7 +98,7 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await step(page, 'forward')
       await decodedValue(page, 99)
       await showOpcodes(page)
-      await untilOpcode(page, 'REVERT')
+      await seekOpcode(page, 'REVERT')
       await decodedValue(page, 99)
     })
   })

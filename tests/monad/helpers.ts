@@ -36,11 +36,17 @@ async function prepareIde(page: Page, contractFile: string) {
   }))
   // Keep local VM startup independent of the optional payment and survey scripts.
   await page.route(/^https:\/\/(cdn\.paddle\.com|tally\.so)\//, route => route.fulfill({ body: '', contentType: 'application/javascript' }))
+  await page.route(/^https:\/\/(cdn\.jsdelivr\.net\/npm|unpkg\.com)\/hardhat\/package\.json$/, route => route.fulfill({
+    path: 'node_modules/hardhat/package.json', contentType: 'application/json'
+  }))
   await page.route('**/console.sol', route => route.fulfill({ path: 'node_modules/hardhat/console.sol', contentType: 'text/plain' }))
   const unitTest = contractFile.endsWith('_test.sol')
   await page.goto(`/#activate=solidity,udapp,debugger,filePanel${unitTest ? ',solidityUnitTesting' : ''}&version=${compiler}`, { waitUntil: 'domcontentloaded' })
-  // Hover help can overlap controls while panels move during debugging.
-  await page.addStyleTag({ content: '[role="tooltip"] { pointer-events: none !important; }' })
+  // Keep the resize handle aligned when debugging expands the panel; hover help must not cover controls.
+  await page.addStyleTag({ content: `
+    #side-panel { transition: none !important; }
+    [role="tooltip"] { pointer-events: none !important; }
+  ` })
   await expect(page.locator('[data-id="workspaceloaded"]')).toBeAttached({ timeout: 60_000 })
   await expect(page.locator('[data-id="apploaded"]')).toBeAttached()
   if (unitTest) await page.locator('#icon-panel div[plugin="filePanel"]').click()
@@ -93,6 +99,21 @@ export async function showOpcodes(page: Page) {
 }
 
 export const currentOpcode = (page: Page) => page.locator('.opcodes-container .opcode-item[style*="background-color"]')
+
+export async function seekOpcode(page: Page, opcode: string) {
+  const header = page.locator('[data-id="callTraceHeader"]')
+  const current = Number((await header.innerText()).match(/Step: (\d+) /)[1])
+  const hash = await page.locator('[data-id="debuggerTransactionInput"]').inputValue()
+  const target = await page.evaluate(async ({ hash, current, opcode }) => {
+    const trace = await (window as any).__remixVM_web3.send('debug_traceTransaction', [hash])
+    return trace.structLogs.findIndex((entry: { op: string }, index: number) => index >= current && entry.op === opcode)
+  }, { hash, current, opcode })
+  expect(target, `${opcode} at or after trace step ${current} in ${hash}`).toBeGreaterThanOrEqual(current)
+  // Reuse the existing Nightwatch navigation hook; UI assertions and button stepping follow the seek.
+  await page.evaluate(target => (window as any).jumpToDebuggerStep(target), target)
+  await expect(header).toHaveText(new RegExp(`\\(Step: ${target} / \\d+\\)`))
+  await expect(currentOpcode(page)).toContainText(new RegExp(`\\b${opcode}\\b`))
+}
 
 export async function step(page: Page, direction: 'forward' | 'back') {
   const header = page.locator('[data-id="callTraceHeader"]')

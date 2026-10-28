@@ -1,7 +1,7 @@
 import { expect, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { Interface, parseEther } from 'ethers'
-import { test, selectEnvironment, showOpcodes, currentOpcode, step } from './helpers'
+import { test, selectEnvironment, showOpcodes, currentOpcode, seekOpcode, step } from './helpers'
 
 test.use({ contractFile: 'StakingDemo.sol', scriptRunner: true })
 test.describe.configure({ timeout: 420_000 })
@@ -61,24 +61,8 @@ async function inspectCall(page: Page, method: string, value: number) {
   const scope = name => page.locator('.call-trace-item').filter({ has: page.locator('.method-name', { hasText: new RegExp(`^${name}$`) }) })
   await expect(scope(method)).toHaveCount(1)
   await scope(method).click()
-  // Use source steps through the internal Solidity helper, then instruction steps at CALL.
   await showOpcodes(page)
-  await page.locator('.json-line').filter({ has: page.locator('.json-key', { hasText: /^opcode$/ }) }).locator('i').click()
-  await expect(page.locator('.opcodes-container')).not.toBeVisible()
-  const line = page.locator(`#editorView .highlightLine${callLine}:visible`).first()
-  const highlight = page.locator('#editorView [class*="highlightLine"]').first()
-  await expect(highlight).toBeAttached()
-  for (let i = 0; i < 80 && !await line.isVisible(); i++) {
-    const header = page.locator('[data-id="callTraceHeader"]')
-    const before = await header.innerText()
-    await page.locator('[data-id="btnStepInto"]').click()
-    await expect(header).not.toHaveText(before)
-    await expect(highlight).toBeAttached()
-  }
-  await expect(line).toBeVisible()
-  await showOpcodes(page)
-  for (let i = 0; i < 160 && !/\bCALL\b/.test(await currentOpcode(page).innerText()); i++) await step(page, 'forward')
-  await expect(currentOpcode(page)).toContainText(/\bCALL\b/)
+  await seekOpcode(page, 'CALL')
   await expect(page.locator(`#editorView .highlightLine${callLine}`).first()).toBeVisible()
   await expect(page.locator('.call-trace-item .method-name')).toHaveCount(1)
   await step(page, 'forward')

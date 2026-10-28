@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: './tests/monad',
   globalSetup: './tests/monad/setup.ts',
   forbidOnly: !!process.env.CI,
+  // Distribute individual scenarios across CI shards, including tests in the same file.
+  fullyParallel: true,
   workers: 1,
   retries: 0,
   timeout: 120_000,
