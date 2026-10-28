@@ -69,6 +69,9 @@ export const SwarmCollab = ({ plugin, editorRef, monacoRef, currentFile }: Swarm
       return
     }
 
+    // Let the modal finish its hide animation before the browser may show a native permission popup.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
     const { mode, settings, joinForm } = dataRef.current
     const joining = mode === 'join'
     const pastedInvite = joining && !initialInvite ? parseInviteInput(joinForm.link) : null
