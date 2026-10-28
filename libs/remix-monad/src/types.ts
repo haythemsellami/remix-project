@@ -1,7 +1,7 @@
 import type { Engine } from 'monad-revmjs'
 
 export type { MonadSpec, AccountState, ExecutionResult as EngineResult } from 'monad-revmjs'
-export type MonadEngine = Pick<Engine, 'fund' | 'account' | 'execute' | 'snapshot' | 'restore' | 'set_block_hash' | 'free'>
+export type MonadEngine = Pick<Engine, 'fund' | 'account' | 'execute' | 'staking_transition' | 'snapshot' | 'restore' | 'set_block_hash' | 'free'>
 
 export interface RpcRequest {
   method: string

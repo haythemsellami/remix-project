@@ -31,6 +31,8 @@ Signing tests compare EIP-712 signatures with ethers and recover them through th
 
 [DelegatedAccount.sol](../examples/DelegatedAccount.sol) and [delegated-transactions.js](../examples/delegated-transactions.js) cover access lists, signed authorizations, caller rollback and revocation. Provider tests check simulation isolation, local reserve history and saved-state debugging. Browser scenarios use the account delegation controls and Ethers script runner on both Monad forks, then inspect source, storage and failures after revocation. The wrapper separately compares typed-transaction fixtures between native and WASM.
 
+[StakingDemo.sol](../examples/StakingDemo.sol) and [staking-workflow.js](../examples/staking-workflow.js) cover validator setup, delegation, epoch changes, reward minting, claims and withdrawal. Provider tests verify atomic failures, caller rollback, historical state and saved transition validation. Browser scenarios run the complete script on both forks, save/reset/restore through the existing controls, debug successful and caught/propagated failed staking calls, then continue epoch transitions. Native/WASM staking parity lives in the engine repository; validator signature verification remains skipped there.
+
 The workflow uploads `monad-browser-results`, containing the HTML report and failure screenshots, browser diagnostics, and Playwright traces. Locally, use:
 
 ```sh
