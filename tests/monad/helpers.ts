@@ -42,8 +42,11 @@ async function prepareIde(page: Page, contractFile: string) {
   await page.route('**/console.sol', route => route.fulfill({ path: 'node_modules/hardhat/console.sol', contentType: 'text/plain' }))
   const unitTest = contractFile.endsWith('_test.sol')
   await page.goto(`/#activate=solidity,udapp,debugger,filePanel${unitTest ? ',solidityUnitTesting' : ''}&version=${compiler}`, { waitUntil: 'domcontentloaded' })
-  // Hover help can overlap controls while panels move during debugging.
-  await page.addStyleTag({ content: '[role="tooltip"] { pointer-events: none !important; }' })
+  // Keep the resize handle aligned when debugging expands the panel; hover help must not cover controls.
+  await page.addStyleTag({ content: `
+    #side-panel { transition: none !important; }
+    [role="tooltip"] { pointer-events: none !important; }
+  ` })
   await expect(page.locator('[data-id="workspaceloaded"]')).toBeAttached({ timeout: 60_000 })
   await expect(page.locator('[data-id="apploaded"]')).toBeAttached()
   if (unitTest) await page.locator('#icon-panel div[plugin="filePanel"]').click()
