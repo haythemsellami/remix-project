@@ -85,7 +85,6 @@ export const SwarmCollab = ({ plugin, editorRef, monacoRef, currentFile }: Swarm
         if (session.getState().phase !== 'idle') await session.leave()
         await session.join(joinInvite, settings)
       }
-      openPanel()
     } catch (err) {
       const errorMsg = session.getState().error
       session.dismissError()
@@ -97,6 +96,11 @@ export const SwarmCollab = ({ plugin, editorRef, monacoRef, currentFile }: Swarm
   }
 
   openModalRef.current = openModal
+
+  // Open panel as soon as the session leaves idle (connecting, syncing, live).
+  useEffect(() => {
+    if (state.phase !== 'idle') openPanel()
+  }, [state.phase])
 
   // Async DOC_ERROR — surface in panel.
   useEffect(() => {
