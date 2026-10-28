@@ -37,6 +37,14 @@ const hash = (value: any) => typeof value === 'string' && /^0x[\da-f]{64}$/i.tes
 const integer = (value: any) => Number.isSafeInteger(value) && value >= 0
 const invalid = (detail: string): never => { throw new RpcError(`Invalid saved Monad state: ${detail}`) }
 
+function blockContext(block: any) {
+  const quantity = (value: any) => typeof value === 'string' && /^0x(?:0|[1-9a-f][\da-f]*)$/i.test(value)
+  const safe = (value: any) => quantity(value) && BigInt(value) <= BigInt(Number.MAX_SAFE_INTEGER)
+  if (!object(block) || !safe(block.number) || !safe(block.timestamp) || !safe(block.gasLimit) ||
+      !quantity(block.baseFeePerGas) || BigInt(block.baseFeePerGas) > 0xffffffffffffffffn ||
+      !/^0x[\da-f]{40}$/i.test(block.miner) || !hash(block.mixHash) || !hash(block.parentHash)) invalid('malformed block execution context')
+}
+
 export function isStakingAction(action: any): action is StakingAction {
   if (!object(action)) return false
   const quantity = (value: any) => typeof value === 'string' && /^0x[\da-f]+$/i.test(value)
@@ -97,6 +105,7 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   }
   if (!Array.isArray(state.blocks) || !state.blocks.length) invalid('missing local blocks')
   for (const [index, block] of state.blocks.entries()) {
+    blockContext(block)
     if (!object(block) || block.number !== '0x' + index.toString(16) || !hash(block.hash) || !Array.isArray(block.transactions) || block.transactions.length > 1 || (index === 0 && block.transactions.length !== 0) || (index > 0 && block.parentHash !== state.blocks[index - 1].hash)) invalid('malformed local block chain')
   }
   const stakingTransitions = pairs(state.stakingTransitions ?? [], 'staking transitions').map(([id, record]): [string, RecordedStakingTransition] => {
@@ -113,6 +122,8 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   const transitions = new Map(stakingTransitions)
   const executions = pairs(state.executions, 'executions').map(([id, record]): [string, RecordedExecution] => {
     if (!hash(id) || !object(record) || !object(record.tx) || !object(record.receipt) || !object(record.block) || !object(record.result) || record.tx.hash !== id || record.receipt.transactionHash !== id || record.block.hash !== record.tx.blockHash || record.receipt.blockHash !== record.block.hash || !hash(record.block.hash)) invalid('malformed execution record')
+    blockContext(record.block)
+    if (record.tx.blockNumber !== record.block.number || record.receipt.blockNumber !== record.block.number) invalid('inconsistent execution block number')
     const result = record.result
     if (typeof result.success !== 'boolean' || !hex(result.returnValue) || !integer(result.gasUsed) || !integer(result.gasSpent) || !Array.isArray(result.logs) || !Array.isArray(record.receipt.logs) || typeof result.traceTruncated !== 'boolean') invalid('malformed execution result')
     if (result.authorizationAuthorities !== undefined && (!Array.isArray(result.authorizationAuthorities) || result.authorizationAuthorities.some(address => typeof address !== 'string' || !/^0x[\da-f]{40}$/i.test(address)))) invalid('malformed authorization authorities')
@@ -127,6 +138,7 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
     for (const id of block.transactions) {
       const record = records.get(id)
       if (!record || record.tx.blockHash !== block.hash || record.tx.blockNumber !== block.number) invalid('block references a missing or inconsistent transaction')
+      if (['timestamp', 'gasLimit', 'baseFeePerGas', 'miner', 'mixHash', 'parentHash'].some(key => record.block[key] !== block[key])) invalid('inconsistent transaction block context')
     }
   }
   const tags = state.tags === undefined ? [] : pairs(state.tags, 'call tags')
