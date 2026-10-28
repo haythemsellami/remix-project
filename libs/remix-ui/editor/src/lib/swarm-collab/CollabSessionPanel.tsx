@@ -29,7 +29,8 @@ export const CollabSessionPanel = ({ state, onLeave, onDismissError }: CollabSes
         <div className="mb-2 d-flex justify-content-between align-items-center">
           <div>
             Room <code>{state.roomId?.slice(0, 12)}</code> · workspace <b>{state.workspace}</b>
-            {state.isCreator && <span className="badge bg-info ms-1">host</span>}
+            {state.isCreator && <span className="badge bg-success ms-1">host</span>}
+            <span className="badge bg-warning text-dark ms-1">beta</span>
           </div>
           <span className="badge bg-secondary ms-2">{connectedCount} connected</span>
         </div>

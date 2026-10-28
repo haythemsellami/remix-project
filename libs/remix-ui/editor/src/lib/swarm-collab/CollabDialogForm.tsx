@@ -55,6 +55,9 @@ export const CollabDialogForm = ({ dataRef, initialMode, initialInvite, isActive
 
   return (
     <div className="w-100 overflow-hidden">
+      <div className="mb-2">
+        <span className="badge bg-warning text-dark">beta</span>
+      </div>
       {!initialInvite && !isActive && (
         <div className="btn-group btn-group-sm w-100 mb-3" role="group">
           <button type="button" className={`btn ${joining ? 'btn-outline-primary' : 'btn-primary'}`} onClick={() => setMode('create')} data-id="swarmCollabModeCreate">Share this workspace</button>
