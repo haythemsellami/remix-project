@@ -19,6 +19,7 @@ export interface CollabPerson {
   username: string
   sessions: number
   connected: boolean
+  isCreator: boolean
 }
 
 export interface CollabState {
@@ -65,6 +66,7 @@ export class CollabSession {
   private peerStates = new Map<string, PeerConnectionState>()
   private cursors = new Map<string, AwarenessUpdate>()
   private readonly colors = new Map<string, number>()
+  private creatorAddress = ''
   private starting = false
   private listening = false
   private generation = 0
@@ -186,6 +188,7 @@ export class CollabSession {
     const settings = isTransport(invite.transport) ? { ...chosen, transport: invite.transport } : chosen
     const identity = loadIdentity()
     const isCreator = invite.creator === identity.address.toLowerCase()
+    this.creatorAddress = invite.creator.toLowerCase()
     const stamp = normalizeStamp(settings.stamp)
     // Empty is allowed: a gateway attaches its own stamp.
     if (stamp && !/^[0-9a-f]{64}$/.test(stamp)) throw new Error('A postage stamp must be 64 hex characters, or left empty when the Bee URL is a gateway.')
@@ -334,9 +337,10 @@ export class CollabSession {
     this.members.forEach((entry, address) => {
       if (!entry.live) return
 
-      const person = people.get(entry.identity) ?? { identity: entry.identity, username: entry.username, sessions: 0, connected: false }
+      const person = people.get(entry.identity) ?? { identity: entry.identity, username: entry.username, sessions: 0, connected: false, isCreator: false }
       person.sessions++
       person.connected = person.connected || this.peerStates.get(address) === PeerConnectionState.Connected
+      if (address.toLowerCase() === this.creatorAddress) person.isCreator = true
       people.set(entry.identity, person)
     })
     this.setState({ ...this.state, people: [...people.values()]})
