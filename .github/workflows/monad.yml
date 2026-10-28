@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integration:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
     env:
       NX_NO_CLOUD: 'true'
       NX_DAEMON: 'false'
@@ -49,17 +49,70 @@ jobs:
           libs/remix-debug/test/debugger.ts
       - name: Build Remix with its VM workers and WASM asset
         run: yarn nx build remix-ide --configuration=development --skip-nx-cache
+      - name: Pack the browser build
+        run: tar -czf "$RUNNER_TEMP/monad-browser-build.tar.gz" -C dist/apps/remix-ide .
+      - name: Share the build with browser shards
+        uses: actions/upload-artifact@v4
+        with:
+          name: monad-browser-build
+          path: ${{ runner.temp }}/monad-browser-build.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+  browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - name: Install locked dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Download the browser build
+        uses: actions/download-artifact@v4
+        with:
+          name: monad-browser-build
+          path: ${{ runner.temp }}
+      - name: Unpack the browser build
+        run: |
+          mkdir -p dist/apps/remix-ide
+          tar -xzf "$RUNNER_TEMP/monad-browser-build.tar.gz" -C dist/apps/remix-ide
       - name: Install Chromium
         run: yarn playwright install --with-deps chromium
       - name: Test browser execution and debugging
-        run: yarn test:monad:browser
+        run: yarn test:monad:browser --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload browser report and failure diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: monad-browser-results
+          name: monad-browser-results-${{ matrix.shard }}
           path: |
             playwright-report/monad
             test-results/monad
           if-no-files-found: ignore
           retention-days: 7
+
+  # Keep the existing required check name and fail if any prerequisite did not pass.
+  integration:
+    needs: [build, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check build and all browser shards
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$BROWSER_RESULT" = success
