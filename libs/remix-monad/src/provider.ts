@@ -1,10 +1,10 @@
 import { accessListify, getAddress, getBytes, keccak256, toQuantity, toUtf8Bytes, Transaction, Wallet, ZeroAddress, ZeroHash } from 'ethers'
 import { signTypedData, SignTypedDataVersion } from '@metamask/eth-sig-util'
 import { Buffer } from 'buffer'
-import type { ExecuteRequest } from 'monad-revmjs'
+import type { ExecuteRequest, StakingAction, StakingRequest, StakingResult } from 'monad-revmjs'
 import type { AccountState, EngineResult, MonadEngine, MonadSpec, RpcRequest } from './types'
 import { RpcError } from './types'
-import { readState, RecordedExecution } from './state'
+import { isStakingAction, readState, RecordedExecution, RecordedStakingTransition } from './state'
 import { decodeConsoleCalls } from './console'
 import { decodeDelegatedTransaction, signDelegatedTransaction, SignedEnvelope } from './transaction'
 
@@ -32,6 +32,7 @@ export class MonadProvider {
   private wallets = new Map<string, Wallet>()
   private blocks: any[] = []
   private executions = new Map<string, RecordedExecution>()
+  private stakingTransitions = new Map<string, RecordedStakingTransition>()
   private tags = new Map<string, string>()
   private callId: string | number | undefined
   private callCounter = 0
@@ -69,6 +70,7 @@ export class MonadProvider {
       this.wallets = wallets
       this.blocks = state.blocks
       this.executions = new Map(state.executions)
+      this.stakingTransitions = new Map(state.stakingTransitions)
       this.tags = new Map(state.tags)
       this.callCounter = state.callCounter
     } else {
@@ -112,10 +114,13 @@ export class MonadProvider {
     const selected = this.block(block)
     if (!selected) throw new RpcError('Unknown local block')
     const execution = this.executions.get(selected.transactions[0])
+    const transition = this.stakingTransitions.get(selected.hash)
+    if (transition) return JSON.parse(transition.after).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
     if (!execution) {
       if (selected.number === '0x0') {
-        const wallet = this.wallets.get(address.toLowerCase())
-        return { balance: wallet ? BALANCE : '0x0', nonce: 0, code: '0x', storage: {} }
+        const first = this.blocks[1]
+        const before = this.executions.get(first?.transactions[0])?.before || this.stakingTransitions.get(first?.hash)?.before || this.engine.snapshot()
+        return JSON.parse(before).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
       }
       throw new RpcError('Historical state is unavailable')
     }
@@ -131,8 +136,8 @@ export class MonadProvider {
     return this.blocks[Number(BigInt(tag))] || null
   }
 
-  private makeBlock(number: number, parentHash: string, transactions: string[], gasUsed: number, timestamp = Math.floor(Date.now() / 1000)) {
-    const hash = keccak256(toUtf8Bytes(JSON.stringify({ spec: this.options.fork, number, parentHash, transactions, timestamp })))
+  private makeBlock(number: number, parentHash: string, transactions: string[], gasUsed: number, timestamp = Math.floor(Date.now() / 1000), stakingAction?: StakingAction) {
+    const hash = keccak256(toUtf8Bytes(JSON.stringify({ spec: this.options.fork, number, parentHash, transactions, timestamp, stakingAction })))
     return {
       number: toQuantity(number), hash, parentHash, timestamp: toQuantity(timestamp),
       nonce: '0x0000000000000000', sha3Uncles: keccak256('0xc0'), logsBloom: BLOOM,
@@ -296,6 +301,26 @@ export class MonadProvider {
     return record
   }
 
+  private stakingTransition(action: StakingAction) {
+    if (!isStakingAction(action)) throw new RpcError('Invalid staking action; expected snapshot, epochChange or reward with exact hex quantities')
+    action = JSON.parse(JSON.stringify(action))
+    const before = this.engine.snapshot()
+    const number = this.blocks.length
+    const timestamp = Math.floor(Date.now() / 1000)
+    const request: StakingRequest = { action, blockNumber: number, timestamp, commit: true }
+    let result: StakingResult
+    try { result = JSON.parse(this.engine.staking_transition(JSON.stringify(request))) } catch (error) {
+      throw new RpcError(String(error))
+    }
+    if (!result.success) throw new RpcError(result.error || 'Staking transition failed', 3, result.returnValue)
+    const block = this.makeBlock(number, this.blocks[number - 1].hash, [], 0, timestamp, action)
+    this.engine.set_block_hash(number, block.hash)
+    this.stakingTransitions.set(block.hash, { action, result, before, after: this.engine.snapshot() })
+    this.blocks.push(block)
+    // Return detached data: callers must not be able to mutate retained local history.
+    return JSON.parse(JSON.stringify({ blockHash: block.hash, blockNumber: block.number, ...result }))
+  }
+
   private storageRange([blockHash, index, address, start = ZeroHash, max = 1000]: any[]) {
     const record = [...this.executions.values()].find(record => record.tx.blockHash === blockHash && Number(index) === 0)
     if (!record) throw new RpcError('Unknown local transaction for storage inspection')
@@ -374,9 +399,22 @@ export class MonadProvider {
     case 'eth_getStateDb': return JSON.parse(JSON.stringify({
       backend: 'monad-revm', version: 1, spec: this.options.fork, engine: this.engine.snapshot(),
       keys: [...this.wallets.values()].map(wallet => wallet.privateKey), blocks: this.blocks, executions: [...this.executions],
+      stakingTransitions: [...this.stakingTransitions],
       tags: [...this.tags], callCounter: this.callCounter
     }))
     case 'eth_getBlocksData': return { blocks: [], latestBlockNumber: this.blocks.length - 1, baseBlockNumber: '0x0' }
+    case 'monad_stakingTransition': {
+      if (params.length !== 1) throw new RpcError('Expected one staking action')
+      return this.stakingTransition(params[0])
+    }
+    case 'monad_setBalance': {
+      if (params.length !== 2 || typeof params[1] !== 'string' || !/^0x[\da-f]+$/i.test(params[1]) || BigInt(params[1]) >= (1n << 256n)) throw new RpcError('Expected a local account and an exact hex balance')
+      if (this.blocks.length !== 1 || this.executions.size) throw new RpcError('Set development balances before the first execution; reset the Monad VM to start again')
+      const address = getAddress(params[0])
+      if (!this.wallets.has(address.toLowerCase())) throw new RpcError('Unknown local account')
+      this.engine.fund(address, params[1])
+      return true
+    }
     case 'eth_signTypedData': case 'eth_signTypedData_v4': {
       try {
         const wallet = this.wallets.get(getAddress(params[0]).toLowerCase())
