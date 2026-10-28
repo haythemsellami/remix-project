@@ -823,8 +823,9 @@ export class PlanManagerPlugin extends ViewPlugin {
   /**
    * Preview localized list prices for a set of products (no discount).
    * Used to render the upsell grid's per-package prices in the visitor's
-   * currency. Returns a `slug → localized price` map (pre-tax subtotal),
-   * or `null` when Paddle is unavailable / nothing maps.
+   * currency. Returns a `slug → localized price` map (tax-inclusive, i.e.
+   * what the buyer actually pays), or `null` when Paddle is unavailable /
+   * nothing maps.
    */
   async previewProductPrices(
     items: Array<{ slug: string; productType: CartItem['productType']; priceId?: number }>
@@ -856,7 +857,7 @@ export class PlanManagerPlugin extends ViewPlugin {
         // Format with Intl (not Paddle's `formattedTotals`) for consistency
         // across the UI and to avoid Paddle's locale-ambiguous strings
         // (e.g. CLP renders as "$18.393" which reads like ~18 dollars).
-        if (slug) out[slug] = formatPaddleMinor(Number(li?.totals?.subtotal ?? 0) || 0, currencyCode)
+        if (slug) out[slug] = formatPaddleMinor(paddleGrossListMinor(li), currencyCode)
       })
       return out
     } catch (err) {
@@ -927,12 +928,14 @@ export class PlanManagerPlugin extends ViewPlugin {
         currencyCode,
         countryCode: result?.data?.address?.countryCode ?? result?.data?.customerIpAddress ?? '(auto-geo)',
         lineItems: lineItems.map((li: any) => {
-          const rawMinor = Number(li?.totals?.subtotal ?? 0) || 0
+          const rawMinor = paddleGrossListMinor(li)
           return {
             priceId: li?.price?.id,
             productName: li?.product?.name,
-            rawMinorSubtotal: rawMinor,
-            paddleFormatted: li?.formattedTotals?.subtotal,
+            rawMinorSubtotal: Number(li?.totals?.subtotal ?? 0) || 0,
+            rawMinorTax: Number(li?.totals?.tax ?? 0) || 0,
+            rawMinorGross: rawMinor,
+            paddleFormatted: li?.formattedTotals?.total,
             intlFormatted: formatPaddleMinor(rawMinor, currencyCode)
           }
         }),
@@ -941,7 +944,7 @@ export class PlanManagerPlugin extends ViewPlugin {
       lineItems.forEach((li: any) => {
         const pid = li?.price?.id
         if (!pid) return
-        const rawMinor = Number(li?.totals?.subtotal ?? 0) || 0
+        const rawMinor = paddleGrossListMinor(li)
         byPaddlePriceId[pid] = {
           paddlePriceId: pid,
           rawMinor,
@@ -3543,7 +3546,11 @@ const PlanManagerOverlay: React.FC<{
               ? <>Signed in · billing data live</>
               : <>Catalog only. Sign in to manage your subscription.</>}
           </div>
-          <div className="pm-footer__vat">All prices exclude VAT/tax where applicable</div>
+          <div className="pm-footer__vat">
+            {catalogPrices
+              ? 'Prices include VAT/tax for your location where applicable'
+              : 'All prices exclude VAT/tax where applicable'}
+          </div>
           <div className="pm-footer__links">
             <a href="https://remix.live/termsandconditions" target="_blank" rel="noreferrer">Terms and Conditions</a>
             <a href="https://remix-ide.readthedocs.io/" target="_blank" rel="noreferrer">Docs</a>
@@ -4250,9 +4257,12 @@ interface CartPreviewLine {
   formattedSubtotal: string
   formattedDiscount: string
   formattedTotal: string
+  /** Pre-discount, tax-inclusive price (what the plan cards show). */
+  formattedListGross: string
   rawSubtotal: number
   rawDiscount: number
   rawTotal: number
+  rawListGross: number
   hasDiscount: boolean
 }
 
@@ -4264,10 +4274,14 @@ interface CartPricePreview {
   rawDiscount: number
   rawTax: number
   rawTotal: number
+  rawListGross: number
   formattedSubtotal: string
   formattedDiscount: string
   formattedTax: string
   formattedTotal: string
+  formattedListGross: string
+  /** Tax-inclusive discount (list gross − total due). */
+  formattedGrossDiscount: string
   hasDiscount: boolean
   hasTax: boolean
 }
@@ -4305,11 +4319,33 @@ function relativeTimeFrom(iso: string | null | undefined): string {
 /** A single product's localized list price from the batched catalog preview. */
 interface LocalizedCatalogPrice {
   paddlePriceId: string
-  /** Pre-tax subtotal in the currency's minor units. */
+  /** Tax-inclusive list price (no discount) in the currency's minor units. */
   rawMinor: number
   currencyCode: string
-  /** Localized, formatted subtotal string for display. */
+  /** Localized, formatted tax-inclusive price string for display. */
   formatted: string
+}
+
+/**
+ * Pre-discount, tax-inclusive amount of a Paddle PricePreview line item, in
+ * minor units — the price the buyer actually pays before any promo.
+ *
+ * Paddle's `totals.subtotal` is always ex-tax: in tax-exclusive regions (EU)
+ * VAT is added on top at checkout, and in tax-inclusive regions Paddle backs
+ * the tax out of the list price. Showing it therefore never matches the
+ * checkout. `totals.total` is tax-inclusive but net of any discount, so for
+ * discounted lines we gross the subtotal up by the line's effective tax ratio.
+ */
+function paddleGrossListMinor(li: any): number {
+  const t = li?.totals ?? {}
+  const subtotal = Number(t.subtotal ?? 0) || 0
+  const discount = Number(t.discount ?? 0) || 0
+  const tax = Number(t.tax ?? 0) || 0
+  const total = Number(t.total ?? 0) || 0
+  if (discount <= 0) return total > 0 ? total : subtotal
+  const net = subtotal - discount
+  const ratio = net > 0 ? tax / net : (Number(li?.taxRate) || 0)
+  return Math.round(subtotal * (1 + ratio))
 }
 
 /** Localized list prices for the whole catalog, keyed by Paddle price id. */
@@ -4350,6 +4386,7 @@ function normalizePricePreview(
     const rawSubtotal = Number(totals.subtotal ?? 0) || 0
     const rawDiscount = Number(totals.discount ?? 0) || 0
     const rawTotal = Number(totals.total ?? 0) || 0
+    const rawListGross = paddleGrossListMinor(li)
     return {
       paddlePriceId: priceId,
       slug: cartItem?.slug ?? priceId,
@@ -4360,9 +4397,11 @@ function normalizePricePreview(
       formattedSubtotal: formatPaddleMinor(rawSubtotal, currencyCode),
       formattedDiscount: formatPaddleMinor(rawDiscount, currencyCode),
       formattedTotal: formatPaddleMinor(rawTotal, currencyCode),
+      formattedListGross: formatPaddleMinor(rawListGross, currencyCode),
       rawSubtotal,
       rawDiscount,
       rawTotal,
+      rawListGross,
       hasDiscount: rawDiscount > 0
     }
   })
@@ -4371,6 +4410,7 @@ function normalizePricePreview(
   const rawDiscount = lineItems.reduce((s, l) => s + l.rawDiscount, 0)
   const rawTax = lineItemsRaw.reduce((s: number, li: any) => s + (Number(li?.totals?.tax ?? 0) || 0), 0)
   const rawTotal = lineItems.reduce((s, l) => s + l.rawTotal, 0)
+  const rawListGross = lineItems.reduce((s, l) => s + l.rawListGross, 0)
 
   return {
     currencyCode,
@@ -4379,10 +4419,13 @@ function normalizePricePreview(
     rawDiscount,
     rawTax,
     rawTotal,
+    rawListGross,
     formattedSubtotal: formatPaddleMinor(rawSubtotal, currencyCode),
     formattedDiscount: formatPaddleMinor(rawDiscount, currencyCode),
     formattedTax: formatPaddleMinor(rawTax, currencyCode),
     formattedTotal: formatPaddleMinor(rawTotal, currencyCode),
+    formattedListGross: formatPaddleMinor(rawListGross, currencyCode),
+    formattedGrossDiscount: formatPaddleMinor(Math.max(0, rawListGross - rawTotal), currencyCode),
     hasDiscount: rawDiscount > 0,
     hasTax: rawTax > 0
   }
@@ -4470,18 +4513,18 @@ const CartUpsellStep: React.FC<{
       ? `first ${interval}`
       : intervals === 1 ? `first ${interval}` : `first ${intervals} ${interval}s`
     const planLine = previewBySlug.get(planItem.slug)
-    const fullPlanPrice = planLine ? planLine.formattedSubtotal : `$${(planPriceCents / 100).toFixed(2)}`
+    const fullPlanPrice = planLine ? planLine.formattedListGross : `$${(planPriceCents / 100).toFixed(2)}`
     renewalLabel = `then ${fullPlanPrice}/${interval} after ${durationLabel}`
   }
 
   // Display strings — prefer localized, fall back to USD.
   const fmtItemSubtotal = (item: CartItem): string => {
     const li = previewBySlug.get(item.slug)
-    return li ? li.formattedSubtotal : `$${(item.priceCents / 100).toFixed(2)}`
+    return li ? li.formattedListGross : `$${(item.priceCents / 100).toFixed(2)}`
   }
-  const subtotalStr = localized ? preview!.formattedSubtotal : `$${(cartTotal / 100).toFixed(2)}`
+  const subtotalStr = localized ? preview!.formattedListGross : `$${(cartTotal / 100).toFixed(2)}`
   const discountStr = localized
-    ? preview!.formattedDiscount
+    ? preview!.formattedGrossDiscount
     : `$${(((fallbackDiscountedCents !== null ? cartTotal - fallbackDiscountedCents : 0)) / 100).toFixed(2)}`
   const totalDueStr = localized
     ? preview!.formattedTotal
@@ -4558,7 +4601,7 @@ const CartUpsellStep: React.FC<{
             )}
             {localized && preview!.hasTax && (
               <div className="pm-cart-upsell__breakdown-row">
-                <span>Tax</span>
+                <span>Incl. tax</span>
                 <span>{preview!.formattedTax}</span>
               </div>
             )}
