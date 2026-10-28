@@ -47,8 +47,11 @@ export const CollabSessionPanel = ({ state, onLeave, onDismissError }: CollabSes
           </div>
         )}
         {state.error && (
-          <div className="alert alert-danger py-1 px-2 small mb-2 d-flex justify-content-between align-items-start">
-            <span>{state.error}</span>
+          <div className="alert alert-danger py-1 px-2 mb-2 d-flex justify-content-between align-items-start">
+            <span>
+              {state.error}
+              <span className="d-block mt-1">Make sure your Swarm node is running, configured correctly and that the postage stamp is valid.</span>
+            </span>
             <button type="button" className="btn-close swarm-collab-close-sm ms-2 flex-shrink-0" onClick={onDismissError} />
           </div>
         )}
