@@ -85,6 +85,8 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
     const saved = await rpc(page, 'eth_getStateDb')
     const snapshotName = `history-${fork}`
     await page.locator('#icon-panel div[plugin="udapp"]').click()
+    // Script deployments populate the UI asynchronously; finish receipt lookup before replacing the VM worker.
+    await expect(page.locator('[data-id="deployedContractsBadge"]')).toHaveText('1')
     await changeProvider(page, async () => {
       await page.locator('[data-id="fork-state-icon"]').click()
       await page.locator('[data-id="forkInput"]').fill(snapshotName)
