@@ -46,7 +46,7 @@ export class TraceManager {
         try {
           // A local VM's development chain ID and block height cannot identify its configured fork.
           const traceFork = result.fork
-          this.fork = Object.values(Hardfork).includes(traceFork as Hardfork)
+          this.fork = traceFork === 'monad-ten' || traceFork === 'monad-next' || Object.values(Hardfork).includes(traceFork as Hardfork)
             ? traceFork : execution.forkAt((await this.web3.getNetwork()).chainId, tx.blockNumber)
         } catch (e) {
           this.fork = 'osaka'
