@@ -6,6 +6,8 @@ Version 1 remains the saved-state format. New saves also include call tags and t
 
 Restore validates the backend, version, Monad specification, chain ID, account keys, execution records, and their references before replacing engine state. Invalid imports leave the provider uninitialized and the engine unchanged. Imported and exported records are detached from live provider data.
 
+Staking saves also include `stakingTransitions`, keyed by the hash of each empty local transition block. Each record retains its action, result and before/after snapshots. Older version 1 saves may omit the field. Restore validates transition records and block references; epoch state, rewards and pending withdrawals live in the engine snapshot. Development balances set before the first execution remain readable at genesis after restore.
+
 A fresh environment restores the default accounts and funding and clears contracts, transactions, call tags, and debugging data. A saved environment restores its account keys, committed state, and execution records; new transactions continue from the saved nonces.
 
 Execution records stay available for the lifetime of the session and are included in saves. The engine's existing per-trace limit still applies: incomplete traces fail explicitly when debugging is requested.

@@ -23,3 +23,5 @@ Expose console output and EIP-712 signing; exercise IDE Solidity tests, JavaScri
 Test CREATE/CREATE2, linked libraries, child constructors, precompile results and failures, and browser debugging on both forks.
 
 Handle typed signed transactions and reserve history; enable delegation controls and debug delegated code, invalid authorization tuples and revocation.
+
+Expose explicit local staking transitions, persist their state, and test rewards, withdrawals and failed staking calls through scripts and the debugger.
