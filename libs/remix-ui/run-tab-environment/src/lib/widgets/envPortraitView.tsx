@@ -332,8 +332,9 @@ function EnvironmentPortraitView() {
   }, [widgetState.network.chainId])
 
   const enableDelegationAuthorization = useMemo(() => {
-    return widgetState.providers.selectedProvider === 'vm-prague' || widgetState.providers.selectedProvider === 'vm-osaka'
-  }, [widgetState.providers.selectedProvider])
+    const monad = selectedProvider?.config?.isVM && ['monad-ten', 'monad-next'].includes(selectedProvider.config.fork)
+    return monad || widgetState.providers.selectedProvider === 'vm-prague' || widgetState.providers.selectedProvider === 'vm-osaka'
+  }, [widgetState.providers.selectedProvider, selectedProvider])
 
   const delegationAddress = useMemo(() => {
     return widgetState.accounts.delegations?.[selectedAccount?.account]

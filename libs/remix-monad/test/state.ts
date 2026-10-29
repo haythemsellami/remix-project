@@ -73,6 +73,8 @@ test('trace readers cannot mutate debugging data included in saved state', async
     const trace = await f.request('debug_traceTransaction', hash)
     trace.structLogs.find(step => step.stack.length).stack.push('ff'.repeat(32))
     trace.structLogs.find(step => step.memory.length).memory.fill(255)
+    assert.ok(trace.codeByAddress[address.toLowerCase()])
+    trace.codeByAddress[address.toLowerCase()] = '0x00'
     assert.deepEqual(await f.save(), saved)
   } finally { f.close() }
 })
@@ -145,7 +147,11 @@ test('version 1 saves without call metadata restore without losing executions or
     const legacy = await f.save()
     delete legacy.tags
     delete legacy.callCounter
-    for (const [, record] of legacy.executions) delete record.result.consoleCalls
+    for (const [, record] of legacy.executions) {
+      delete record.result.consoleCalls
+      delete record.result.codeByAddress
+      delete record.result.authorizationAuthorities
+    }
     const restored = await fixture({ stateDb: legacy })
     try {
       const saved = await restored.save()
@@ -154,7 +160,7 @@ test('version 1 saves without call metadata restore without losing executions or
       assert.deepEqual(saved.tags, [])
       assert.deepEqual(await restored.request('eth_getHHLogsForTx', call), [])
       assert.equal(await restored.request('eth_getStorageAt', address, '0x0'), hashFor(42))
-      assert.deepEqual(await restored.request('debug_traceTransaction', call), await f.request('debug_traceTransaction', call))
+      assert.deepEqual(await restored.request('debug_traceTransaction', call), { ...await f.request('debug_traceTransaction', call), codeByAddress: {} })
       await restored.request('eth_registerCallId', 'legacy-call')
       await restored.request('eth_call', { from: f.from, to: address, data: hashFor(99) })
       assert.notEqual(await restored.request('eth_getHashFromTagBySimulator', 'legacy-call'), call)
@@ -177,6 +183,9 @@ test('invalid saved states fail before replacing engine state, including on retr
       state => { state.executions[0][1].before = '{}' }, state => { state.executions[0][1].after = '{}' },
       state => { state.executions[0][1].result.structLogs = null }, state => { state.executions[0][1].result.preimages = null },
       state => { state.executions[0][1].result.consoleCalls = [123] },
+      state => { state.executions[0][1].result.codeByAddress = { invalid: '0x00' } },
+      state => { state.executions[0][1].result.codeByAddress = { [address]: '0x1' } },
+      state => { state.executions[0][1].result.authorizationAuthorities = [ZeroHash] },
       state => { state.executions[0][0] = ZeroHash }, state => { state.tags = [['missing', ZeroHash]] },
       state => { state.callCounter = -1 }, state => { state.callCounter = 0 }
     ]

@@ -1,6 +1,6 @@
 'use strict'
-import { util, execution } from '@remix-project/remix-lib'
 import { Hardfork } from '@ethereumjs/common'
+import { util, execution } from '@remix-project/remix-lib'
 const { toHexPaddedString } = util
 import { TraceAnalyser } from './traceAnalyser'
 import { TraceCache } from './traceCache'
@@ -12,6 +12,7 @@ import { DebugTraceTransactionResult } from '../types'
 export class TraceManager {
   web3: any
   fork: string
+  monadCodeByAddress: Record<string, string> = {}
   isLoading: boolean
   trace: DebugTraceTransactionResult['structLogs']
   traceCache: TraceCache
@@ -35,10 +36,14 @@ export class TraceManager {
   // init section
   async resolveTrace (tx) {
     this.tx = tx
+    this.monadCodeByAddress = {}
     this.init()
     if (!this.web3) throw new Error('web3 not loaded')
     this.isLoading = true
     const result = await this.getTrace(tx.hash)
+    if (result.fork === 'monad-ten' || result.fork === 'monad-next') {
+      this.monadCodeByAddress = result.codeByAddress || {}
+    }
     try {
       if (result['structLogs'].length > 0) {
         this.trace = result['structLogs']

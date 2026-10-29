@@ -60,6 +60,8 @@ export interface StructLog {
 export interface DebugTraceTransactionResult {
   /** Execution hardfork supplied by a local VM trace provider. */
   fork?: string;
+  /** Executed runtime code, including resolved EIP-7702 delegation. */
+  codeByAddress?: Record<string, string>;
   /** True if the transaction execution failed (reverted). */
   failed: boolean;
   /** The total gas consumed by the transaction (hex-encoded). */

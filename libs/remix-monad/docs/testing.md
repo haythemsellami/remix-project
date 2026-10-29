@@ -21,3 +21,5 @@ Validate saved snapshots and restore call history; cover nested calls, delegated
 Expose console output and EIP-712 signing; exercise IDE Solidity tests, JavaScript/TypeScript scripts, and debugging their transactions.
 
 Test CREATE/CREATE2, linked libraries, child constructors, precompile results and failures, and browser debugging on both forks.
+
+Handle typed signed transactions and reserve history; enable delegation controls and debug delegated code, invalid authorization tuples and revocation.
