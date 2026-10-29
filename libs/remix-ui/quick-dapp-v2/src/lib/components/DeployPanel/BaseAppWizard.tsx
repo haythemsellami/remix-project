@@ -578,7 +578,7 @@ const BaseAppWizard: React.FC<BaseAppWizardProps> = ({ isConfigSaveInFlight, isD
       } else if (mode === 'update') {
         setSuccessModalContent({
           title: 'Update Published!',
-          body: `New code deployed to IPFS and ENS record updated.\nChanges should appear shortly at: ${ensWebsiteUrl(`${savedWizardState.ensName}.${ensDappParentName}`) || "Local ENS: verify contenthash using the local RPC"}`
+          body: `New code deployed to IPFS and ENS record updated.\nChanges should appear shortly at: ${ensWebsiteUrl(fullDomain) || `https://ipfs.io/ipfs/${newCid}`}`
         });
         setShowSuccessModal(true);
       }
@@ -691,7 +691,7 @@ const BaseAppWizard: React.FC<BaseAppWizardProps> = ({ isConfigSaveInFlight, isD
             <Card.Body>
               <div className="text-center py-3 bg-light rounded mb-4 border">
                 <h5 className="fw-bold mb-1 text-dark">{savedWizardState.ensName}.{ensDappParentName}</h5>
-                <a href={ensUrl || undefined} target="_blank" rel="noreferrer" className="small text-decoration-none fw-bold">
+                <a href={ensUrl || ipfsUrl || undefined} target="_blank" rel="noreferrer" className="small text-decoration-none fw-bold">
                 Open Live App <i className="fas fa-external-link-alt ms-1"></i>
                 </a>
               </div>
@@ -716,14 +716,14 @@ const BaseAppWizard: React.FC<BaseAppWizardProps> = ({ isConfigSaveInFlight, isD
                 <h6 className="fw-bold text-muted small mb-2"><i className="fas fa-share-alt me-1"></i>Share</h6>
                 <div className="d-flex align-items-center bg-light border rounded p-2 mb-2">
                   <code className="text-truncate flex-grow-1 small" style={{ color: '#0d6efd' }}>
-                    {ensUrl || 'Local ENS — verify using the local RPC'}
+                    {ensUrl || ipfsUrl}
                   </code>
                   <Button
                     variant="link"
                     size="sm"
                     className="flex-shrink-0 p-0 ms-2"
                     onClick={() => {
-                      navigator.clipboard.writeText(ensUrl);
+                      navigator.clipboard.writeText(ensUrl || ipfsUrl);
                       setCopiedField('url');
                       setTimeout(() => setCopiedField(''), 2000);
                     }}
@@ -735,7 +735,7 @@ const BaseAppWizard: React.FC<BaseAppWizardProps> = ({ isConfigSaveInFlight, isD
                   <Button
                     variant="dark"
                     size="sm"
-                    onClick={() => window.open(`https://x.com/intent/post?text=${encodeURIComponent(`AI-generated DApp, powered by @EthereumRemix QuickDApp ⚡\n\n${ensUrl || 'Local ENS — verify using the local RPC'}`)}`, '_blank')}
+                    onClick={() => window.open(`https://x.com/intent/post?text=${encodeURIComponent(`AI-generated DApp, powered by @EthereumRemix QuickDApp ⚡\n\n${ensUrl || ipfsUrl}`)}`, '_blank')}
                   >
                     <i className="fab fa-x-twitter me-1"></i> Post on X
                   </Button>
@@ -910,7 +910,7 @@ const BaseAppWizard: React.FC<BaseAppWizardProps> = ({ isConfigSaveInFlight, isD
                       <label className="small fw-bold text-muted mb-1">Your ENS URL (paste this into Base.dev)</label>
                       <div className="d-flex align-items-center bg-light border rounded p-2">
                         <code className="text-truncate flex-grow-1 small" style={{ color: '#0d6efd' }}>
-                          {ensUrl || 'Local ENS — verify using the local RPC'}
+                          {ensUrl || 'ENS website links require mainnet.'}
                         </code>
                         <Button
                           variant="link"

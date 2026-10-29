@@ -1,10 +1,10 @@
 // Build-time values only: never place private keys in NX_* variables.
-export const ensTestMode = process.env.NX_ENS_TEST_MODE === 'true'
+export const ensSepolia = process.env.NX_ENS_NETWORK === 'sepolia'
 export const ensParentName = process.env.NX_ENS_PARENT_NAME || 'remixcontract.eth'
 export const ensDappParentName = process.env.NX_ENS_DAPP_PARENT_NAME || 'remixdapp.eth'
 
-export function validateEnsTestEnvironment(baseUrl: string): void {
-  if (!ensTestMode) return
+export function validateEnsEnvironment(baseUrl: string): void {
+  if (!ensSepolia) return
   const base = new URL(baseUrl)
   if (!['http:', 'https:'].includes(base.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)) {
     throw new Error('ENS test mode requires a loopback API URL')
@@ -17,11 +17,12 @@ export function validateEnsTestEnvironment(baseUrl: string): void {
   }
 }
 
-export function assertEnsReverseEnabled(): void {
-  if (ensTestMode) throw new Error('Reverse registration is disabled in the local ENS test profile')
+/** Public eth.limo only serves mainnet names. */
+export function ensWebsiteUrl(name: string): string {
+  return ensSepolia ? '' : `https://${name}.limo`
 }
 
-/** Local names are not served by public eth.limo. Use the local RPC to verify them. */
-export function ensWebsiteUrl(name: string): string {
-  return ensTestMode ? '' : `https://${name}.limo`
+export function ensTransactionUrl(hash: string, dapp = false): string {
+  const host = dapp ? (ensSepolia ? 'sepolia.arbiscan.io' : 'arbiscan.io') : (ensSepolia ? 'sepolia.etherscan.io' : 'etherscan.io')
+  return `https://${host}/tx/${hash}`
 }

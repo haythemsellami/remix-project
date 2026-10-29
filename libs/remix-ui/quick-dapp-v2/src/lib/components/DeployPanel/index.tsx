@@ -23,7 +23,7 @@ import {
 } from '@remix-ui/helper';
 // remixClient removed - using plugin from context instead
 import { trackMatomoEvent } from '@remix-api';
-import { endpointUrls, ensDappParentName, ensWebsiteUrl, ensTestMode } from '@remix-endpoints-helper';
+import { endpointUrls, ensDappParentName, ensWebsiteUrl, ensSepolia, ensTransactionUrl } from '@remix-endpoints-helper';
 
 import BaseAppWizard from './BaseAppWizard';
 import EnsRegistrationModal from './EnsRegistrationModal';
@@ -1035,25 +1035,25 @@ function DeployPanel({ isDeleteInFlight, publishRequestId = 0 }: DeployPanelProp
                       rel="noopener noreferrer"
                       className="text-decoration-underline fw-bold"
                     >
-                      {ensWebsiteUrl(currentEnsDomain) || 'Local ENS — verify using the local RPC'}
+                      {ensWebsiteUrl(currentEnsDomain) || currentEnsDomain}
                     </a>
                   </div>
                   {ensResult.txHash && (
                     <div className="mt-2 small">
                       <span className="text-muted">Tx: </span>
                       <a
-                        href={ensTestMode ? undefined : `https://arbiscan.io/tx/${ensResult.txHash}`}
+                        href={ensTransactionUrl(ensResult.txHash, true)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-muted text-decoration-none"
                       >
-                        {ensTestMode ? ensResult.txHash : 'View on Explorer'} <i className="fas fa-external-link-alt small"></i>
+                        View on Explorer <i className="fas fa-external-link-alt small"></i>
                       </a>
                     </div>
                   )}
                   <small className="d-block mt-2 text-muted">
                     <i className="fas fa-info-circle me-1"></i>
-                    It may take a few minutes for the ENS link to become accessible. If not available yet, try the IPFS gateway link above.
+                    {ensSepolia ? 'Open your DApp using the IPFS link above.' : 'It may take a few minutes for the ENS link to become accessible. If not available yet, try the IPFS gateway link above.'}
                   </small>
                 </Alert>
               )}
@@ -1081,7 +1081,7 @@ function DeployPanel({ isDeleteInFlight, publishRequestId = 0 }: DeployPanelProp
             <Card.Body>
               <div className="d-flex align-items-center bg-light border rounded p-2 mb-3">
                 <code className="text-truncate flex-grow-1 small" style={{ color: '#0d6efd' }}>
-                  {ensWebsiteUrl(currentEnsDomain) || 'Local ENS — verify using the local RPC'}
+                  {ensWebsiteUrl(currentEnsDomain) || currentEnsDomain}
                 </code>
                 <Button
                   variant="link"

@@ -1,9 +1,7 @@
-import { assertEnsReverseEnabled, ensTestMode } from '@remix-endpoints-helper'
 import { Plugin } from '@remixproject/engine'
 import { createPublicClient, createWalletClient, custom, type Hex } from 'viem'
 import {
   ENS_EVENTS,
-  ENS_PUBLIC_RESOLVER_L1,
   OWNABLE_ABI,
   POLL_INTERVAL,
   REVERSE_REGISTRAR_ABI_L1,
@@ -17,6 +15,7 @@ import {
   fetchEnsPreflight,
   getEnsEventName,
   getReverseRegistrar,
+  isL1EnsChain,
   lookupPrimaryEnsName,
   type EnsEventName,
   type JobResult,
@@ -250,7 +249,6 @@ export class EnsContractNamesPlugin extends Plugin {
     this.emitForRequest(ENS_EVENTS.reverseStatus, requestId, { message: 'Connecting wallet...' })
 
     try {
-      assertEnsReverseEnabled()
       this.throwIfCancelled(requestId)
       const provider = await this.getWalletProvider()
       if (!provider) throw new Error('No wallet provider found. Please install MetaMask.')
@@ -278,10 +276,15 @@ export class EnsContractNamesPlugin extends Plugin {
       }
 
       const registrar = getReverseRegistrar(chainId)
-      const isL1 = chainId === 1
+      const isL1 = isL1EnsChain(chainId)
       const abi = isL1 ? REVERSE_REGISTRAR_ABI_L1 : REVERSE_REGISTRAR_ABI_L2
+      const resolver = isL1 ? await publicClient.readContract({
+        address: registrar,
+        abi: REVERSE_REGISTRAR_ABI_L1,
+        functionName: 'defaultResolver',
+      }) : undefined
       const args = isL1
-        ? [contractAddress as Hex, account, ENS_PUBLIC_RESOLVER_L1, fullName]
+        ? [contractAddress as Hex, account, resolver, fullName]
         : [contractAddress as Hex, fullName]
 
       await this.logTerminal('info', `[ENS-Reverse] Registrar: ${registrar}, L1: ${isL1}`)
@@ -306,6 +309,13 @@ export class EnsContractNamesPlugin extends Plugin {
         throw new Error(`Transaction would fail: ${reason}`)
       }
 
+      const gas = await publicClient.estimateContractGas({
+        address: registrar,
+        abi: abi as any,
+        functionName: 'setNameForAddr',
+        args: args as any,
+        account,
+      })
       this.emitForRequest(ENS_EVENTS.reverseStatus, requestId, { message: 'Confirm the transaction in your wallet...' })
       this.throwIfCancelled(requestId)
       const tx = await walletClient.writeContract({
@@ -315,7 +325,7 @@ export class EnsContractNamesPlugin extends Plugin {
         functionName: 'setNameForAddr',
         args: args as any,
         account,
-        gas: BigInt(200000),
+        gas: gas * 120n / 100n,
       })
       await this.logTerminal('info', `[ENS-Reverse] Tx submitted: ${tx}`)
 
@@ -347,7 +357,6 @@ export class EnsContractNamesPlugin extends Plugin {
   }
 
   private async readReverseStatus(chainId: number, contractAddress: string, fullName: string): Promise<ReverseCheckResult> {
-    if (ensTestMode) return { status: 'unavailable', name: '', done: false, message: 'Reverse registration is disabled in the local ENS test profile.' }
     const provider = await this.getWalletProvider()
     if (!provider) {
       return {
@@ -399,7 +408,7 @@ export class EnsContractNamesPlugin extends Plugin {
   }
 
   private async readReverseName(publicClient: any, chainId: number, contractAddress: string): Promise<string> {
-    if (chainId !== 1) {
+    if (!isL1EnsChain(chainId)) {
       const name = await publicClient.readContract({
         address: getReverseRegistrar(chainId),
         abi: REVERSE_REGISTRAR_READ_ABI,
