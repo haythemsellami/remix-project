@@ -107,6 +107,8 @@ export function AccountUI(props: AccountProps) {
       })
     } else {
       switch (selectExEnv) {
+      case 'vm-monad-ten':
+      case 'vm-monad-next':
       case 'vm-osaka':
         setPlusOpt({
           classList: '',
