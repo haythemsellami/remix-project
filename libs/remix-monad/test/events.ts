@@ -227,6 +227,10 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await until(() => f.calls.some(call => call.method === 'eth_getFilterChanges') && f.calls.some(call => call.method === 'eth_blockNumber'), 'listener completed its first poll and established a block baseline')
       const first = await f.invoke(address, 'store', [1, 11, 'one'])
       await until(() => events.length === 1 && once.length === 1, 'listeners receive the first event')
+      // Ethers rearms its one-shot block subscription after delivering filter results.
+      // Wait for its next block poll before mining synchronously again.
+      const nextPoll = f.calls.length
+      await until(() => f.calls.slice(nextPoll).some(call => call.method === 'eth_blockNumber' && call.result === first.blockNumber), 'listener rearmed after the first event')
       const second = await f.invoke(address, 'store', [2, 22, 'two'])
       await until(() => events.length === 2, 'listener receives the second event')
       assert.deepEqual(events, [
