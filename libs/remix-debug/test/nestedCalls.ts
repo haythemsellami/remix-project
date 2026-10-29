@@ -107,6 +107,24 @@ test('source call trees retain raw-bytecode children and frame gas costs', async
   } finally { f.close() }
 })
 
+test('Ethereum storage and memory costs survive source analysis', async () => {
+  const f = await fixture()
+  try {
+    const { debug, costs } = await f.send('delegateStore', [], true)
+    const steps = debug.getTrace()
+    const measured = steps.flatMap((step, index) => ['SSTORE', 'MSTORE'].includes(step.op) ? [index] : [])
+    assert.ok(measured.length > 0)
+    for (const index of measured) {
+      const step = steps[index]
+      assert.equal(steps[index + 1].depth, step.depth)
+      const consumed = BigInt(step.gas) - BigInt(steps[index + 1].gas)
+      assert.ok(consumed > 0n)
+      assert.equal(BigInt(costs[index]), consumed, `${step.op}: RPC trace includes dynamic gas`)
+      assert.equal(BigInt(step.gasCost), consumed, `${step.op}: source analysis preserves that gas cost`)
+    }
+  } finally { f.close() }
+})
+
 test('delegate storage survives a nested call and returns to the caller storage context', async () => {
   const f = await fixture()
   try {
