@@ -17,3 +17,5 @@ The browser suite starts its own server on `127.0.0.1:8090` and serves the pinne
 Build the IDE again after changing application or library sources. Reports and failure traces are written under `playwright-report/monad` and `test-results/monad`.
 
 Validate saved snapshots and restore call history; cover nested calls, delegated storage, revert rollback, and debugger navigation.
+
+Expose console output and EIP-712 signing; exercise IDE Solidity tests, JavaScript/TypeScript scripts, and debugging their transactions.

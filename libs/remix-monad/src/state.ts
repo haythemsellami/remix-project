@@ -56,6 +56,7 @@ function validateTrace(value: any) {
     if (!object(step) || !integer(step.pc) || !integer(step.depth) || step.depth < 1 || !integer(step.gas) || !integer(step.gasCost) || typeof step.op !== 'string' || !Array.isArray(step.stack) || step.stack.some(word => typeof word !== 'string' || !/^[\da-f]{64}$/i.test(word)) || typeof step.memory !== 'string' || !/^(?:[\da-f]{2})*$/i.test(step.memory) || (step.error !== undefined && typeof step.error !== 'string')) invalid('malformed trace step')
   }
   if (Object.entries(value.preimages).some(([key, value]) => !/^[\da-f]{64}$/i.test(key) || typeof value !== 'string' || !/^(?:[\da-f]{2})*$/i.test(value))) invalid('malformed hash preimage')
+  if (value.consoleCalls !== undefined && (!Array.isArray(value.consoleCalls) || value.consoleCalls.some(call => !hex(call)))) invalid('malformed console calls')
 }
 
 /** Validate and detach imported data before replacing any live provider state. */

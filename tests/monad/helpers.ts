@@ -1,11 +1,13 @@
 import { test as base, expect, Page } from '@playwright/test'
 import solc from 'solc'
+import { routeScriptRunner } from './script-runner'
 
 const compiler = `soljson-v${solc.version().split('.Emscripten')[0]}.js`
 type Fork = 'monad-next' | 'monad-ten' | 'osaka'
 
-export const test = base.extend<{ diagnostics: void; ide: void; contractFile: string }>({
+export const test = base.extend<{ diagnostics: void; ide: void; contractFile: string; scriptRunner: boolean }>({
   contractFile: ['MonadDemo.sol', { option: true }],
+  scriptRunner: [false, { option: true }],
   diagnostics: [async ({ page }, use, testInfo) => {
     const messages: string[] = []
     page.on('console', message => {
@@ -15,7 +17,8 @@ export const test = base.extend<{ diagnostics: void; ide: void; contractFile: st
     await use()
     await testInfo.attach('browser-diagnostics', { body: messages.join('\n'), contentType: 'text/plain' })
   }, { auto: true }],
-  ide: [async ({ page, contractFile, diagnostics }, use) => {
+  ide: [async ({ page, contractFile, diagnostics, scriptRunner }, use) => {
+    if (scriptRunner) await routeScriptRunner(page)
     await prepareIde(page, contractFile)
     await use()
   }, { auto: true }]

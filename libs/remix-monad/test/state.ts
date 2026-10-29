@@ -145,12 +145,14 @@ test('version 1 saves without call metadata restore without losing executions or
     const legacy = await f.save()
     delete legacy.tags
     delete legacy.callCounter
+    for (const [, record] of legacy.executions) delete record.result.consoleCalls
     const restored = await fixture({ stateDb: legacy })
     try {
       const saved = await restored.save()
       assert.equal(saved.version, 1)
       assert.deepEqual(saved.executions, legacy.executions)
       assert.deepEqual(saved.tags, [])
+      assert.deepEqual(await restored.request('eth_getHHLogsForTx', call), [])
       assert.equal(await restored.request('eth_getStorageAt', address, '0x0'), hashFor(42))
       assert.deepEqual(await restored.request('debug_traceTransaction', call), await f.request('debug_traceTransaction', call))
       await restored.request('eth_registerCallId', 'legacy-call')
@@ -174,6 +176,7 @@ test('invalid saved states fail before replacing engine state, including on retr
       state => { state.keys = ['invalid'] }, state => { state.blocks = [] }, state => { state.executions = [] },
       state => { state.executions[0][1].before = '{}' }, state => { state.executions[0][1].after = '{}' },
       state => { state.executions[0][1].result.structLogs = null }, state => { state.executions[0][1].result.preimages = null },
+      state => { state.executions[0][1].result.consoleCalls = [123] },
       state => { state.executions[0][0] = ZeroHash }, state => { state.tags = [['missing', ZeroHash]] },
       state => { state.callCounter = -1 }, state => { state.callCounter = 0 }
     ]
