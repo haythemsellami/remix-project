@@ -109,31 +109,84 @@ export class MonadProvider {
     }
   }
 
-  private account(address: string, block = 'latest'): AccountState {
-    if (block === 'latest' || block === 'pending') return JSON.parse(this.engine.account(address))
-    const selected = this.block(block)
-    if (!selected) throw new RpcError('Unknown local block')
+  private account(address: string, selector: unknown = 'latest'): AccountState {
+    const selected = this.resolveBlock(selector)
+    if (BigInt(selected.number) >= BigInt(this.blocks.length - 1)) return JSON.parse(this.engine.account(address))
+    return JSON.parse(this.snapshotAt(selected)).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
+  }
+
+  private snapshotAt(selected: any): string {
+    if (BigInt(selected.number) >= BigInt(this.blocks.length - 1)) return this.engine.snapshot()
     const execution = this.executions.get(selected.transactions[0])
     const transition = this.stakingTransitions.get(selected.hash)
-    if (transition) return JSON.parse(transition.after).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
+    if (transition) return transition.after
     if (!execution) {
       if (selected.number === '0x0') {
         const first = this.blocks[1]
-        const before = this.executions.get(first?.transactions[0])?.before || this.stakingTransitions.get(first?.hash)?.before || this.engine.snapshot()
-        return JSON.parse(before).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
+        return this.executions.get(first?.transactions[0])?.before || this.stakingTransitions.get(first?.hash)?.before || this.engine.snapshot()
       }
       throw new RpcError('Historical state is unavailable')
     }
-    return JSON.parse(execution.after).accounts[address.toLowerCase()] || { balance: '0x0', nonce: 0, code: '0x', storage: {} }
+    return execution.after
+  }
+
+  private pendingBlock() {
+    const latest = this.blocks[this.blocks.length - 1]
+    const timestamp = Math.max(Number(BigInt(latest.timestamp)), Math.floor(Date.now() / 1000))
+    return this.makeBlock(this.blocks.length, latest.hash, [], 0, timestamp)
+  }
+
+  /** State queries select canonical local blocks; synthetic call records are debugger metadata. */
+  private resolveBlock(selector: unknown = 'latest') {
+    const quantity = value => typeof value === 'string' && /^0x(?:0|[1-9a-f][\da-f]*)$/i.test(value)
+    const hash = value => typeof value === 'string' && /^0x[\da-f]{64}$/i.test(value)
+    let numberReference = false
+    if (selector && typeof selector === 'object' && !Array.isArray(selector)) {
+      const reference = selector as Record<string, unknown>
+      const keys = Object.keys(reference)
+      if ('blockHash' in reference) {
+        if (!hash(reference.blockHash) || keys.some(key => !['blockHash', 'requireCanonical'].includes(key)) ||
+            ('requireCanonical' in reference && typeof reference.requireCanonical !== 'boolean')) throw new RpcError('Invalid block hash reference')
+        selector = reference.blockHash
+      } else {
+        if (keys.length !== 1 || !quantity(reference.blockNumber)) throw new RpcError('Invalid block number reference')
+        selector = reference.blockNumber
+        numberReference = true
+      }
+    }
+    if (selector === 'pending') return this.pendingBlock()
+    if (selector === 'latest' || selector === 'safe' || selector === 'finalized') return this.blocks[this.blocks.length - 1]
+    if (selector === 'earliest') return this.blocks[0]
+    let selected
+    if (!numberReference && hash(selector)) selected = this.blocks.find(block => block.hash.toLowerCase() === (selector as string).toLowerCase())
+    else if (quantity(selector)) {
+      const number = BigInt(selector as string)
+      if (number < BigInt(this.blocks.length)) selected = this.blocks[Number(number)]
+    } else throw new RpcError('Invalid local block selector')
+    if (!selected) throw new RpcError('Unknown local block', -32001)
+    return selected
+  }
+
+  /** Requests are serialized, and the callback is synchronous: historical state never escapes. */
+  private withSnapshot<T>(snapshot: string, callback: () => T): T {
+    const live = this.engine.snapshot()
+    try {
+      this.engine.restore(snapshot)
+      return callback()
+    } finally { this.engine.restore(live) }
   }
 
   private block(tag: string) {
-    if (tag === 'latest' || tag === 'pending' || tag === 'safe' || tag === 'finalized') return this.blocks[this.blocks.length - 1]
-    if (tag === 'earliest') return this.blocks[0]
     if (typeof tag === 'string' && tag.length === 66) {
-      return this.blocks.find(block => block.hash === tag) || [...this.executions.values()].find(record => record.tx.blockHash === tag)?.block || null
+      return this.blocks.find(block => block.hash.toLowerCase() === tag.toLowerCase()) || [...this.executions.values()].find(record => record.tx.blockHash.toLowerCase() === tag.toLowerCase())?.block || null
     }
-    return this.blocks[Number(BigInt(tag))] || null
+    try {
+      const selected = this.resolveBlock(tag)
+      return tag === 'pending' ? { ...selected, hash: null, nonce: null } : selected
+    } catch (error) {
+      if (error.code === -32001) return null
+      throw error
+    }
   }
 
   private makeBlock(number: number, parentHash: string, transactions: string[], gasUsed: number, timestamp = Math.floor(Date.now() / 1000), stakingAction?: StakingAction) {
@@ -148,7 +201,7 @@ export class MonadProvider {
     }
   }
 
-  private normalize(tx: any) {
+  private normalize(tx: any, snapshot?: string) {
     if (!tx || typeof tx !== 'object') throw new RpcError('Expected a transaction object')
     const type = Number(BigInt(tx.type ?? (tx.authorizationList != null ? 4 : tx.maxFeePerGas !== undefined ? 2 : tx.accessList != null ? 1 : 0))) as 0 | 1 | 2 | 4
     if (![0, 1, 2, 4].includes(type) || tx.blobVersionedHashes != null || tx.maxFeePerBlobGas != null || tx.blobs != null) {
@@ -178,7 +231,7 @@ export class MonadProvider {
     const dynamicFee = type === 2 || type === 4
     const gasPrice = BigInt(dynamicFee ? (tx.maxFeePerGas ?? GAS_PRICE) : (tx.gasPrice ?? GAS_PRICE))
     const priorityFee = dynamicFee ? BigInt(tx.maxPriorityFeePerGas ?? (gasPrice < GAS_PRICE ? gasPrice : GAS_PRICE)) : null
-    const nonce = Number(BigInt(tx.nonce ?? this.account(from).nonce))
+    const nonce = Number(BigInt(tx.nonce ?? (snapshot ? JSON.parse(snapshot).accounts[from.toLowerCase()]?.nonce ?? 0 : this.account(from).nonce)))
     if (!Number.isSafeInteger(nonce) || nonce < 0) throw new RpcError('Invalid transaction nonce')
     return {
       from, to: tx.to ? getAddress(tx.to) : null, data: tx.data || tx.input || '0x',
@@ -188,7 +241,8 @@ export class MonadProvider {
     }
   }
 
-  private run(tx: ReturnType<MonadProvider['normalize']>, commit: boolean, trace: boolean, blockNumber: number, timestamp: number): EngineResult {
+  private run(tx: ReturnType<MonadProvider['normalize']>, commit: boolean, trace: boolean, block: any): EngineResult {
+    const blockNumber = Number(BigInt(block.number))
     const participants = (number: number) => {
       const hashes = this.blocks[number]?.transactions || []
       return hashes.map(hash => this.recorded(hash)) as RecordedExecution[]
@@ -196,23 +250,24 @@ export class MonadProvider {
     const addresses = (number: number) => participants(number).flatMap(record => [record.tx.from, ...(record.result.authorizationAuthorities || [])])
     const current = participants(blockNumber)
     const execution: ExecuteRequest = {
-      ...tx, blockNumber, timestamp, commit, trace,
+      ...tx, blockNumber, timestamp: Number(BigInt(block.timestamp)), commit, trace,
       chainContext: {
         parentSendersAndAuthorities: addresses(blockNumber - 1),
         grandparentSendersAndAuthorities: addresses(blockNumber - 2),
         currentBlockSenders: current.map(record => record.tx.from),
         currentBlockAuthorities: current.map(record => record.result.authorizationAuthorities || [])
       },
-      blockGasLimit: GAS_LIMIT, baseFee: '0x0', beneficiary: ZeroAddress, prevrandao: ZeroHash
+      blockGasLimit: Number(BigInt(block.gasLimit)), baseFee: block.baseFeePerGas, beneficiary: block.miner, prevrandao: block.mixHash
     }
     return JSON.parse(this.engine.execute(JSON.stringify(execution)))
   }
 
-  private async execute(input: any, commit: boolean, signed?: SignedEnvelope) {
-    const tx = this.normalize(input)
-    const latest = this.blocks[this.blocks.length - 1]
-    const blockNumber = commit ? this.blocks.length : this.blocks.length - 1
-    const timestamp = Math.floor(Date.now() / 1000)
+  private async execute(input: any, commit: boolean, signed?: SignedEnvelope, selector: unknown = 'latest') {
+    const context = commit ? this.pendingBlock() : this.resolveBlock(selector)
+    const before = this.snapshotAt(context)
+    const tx = this.normalize(input, before)
+    const blockNumber = Number(BigInt(context.number))
+    const timestamp = Number(BigInt(context.timestamp))
     let hash: string
     if (commit) {
       if (!signed) {
@@ -227,13 +282,11 @@ export class MonadProvider {
       }
       hash = signed.hash
     } else {
-      hash = keccak256(toUtf8Bytes(JSON.stringify({ tx, call: ++this.callCounter, timestamp })))
+      hash = keccak256(toUtf8Bytes(JSON.stringify({ tx, call: ++this.callCounter, block: context.hash, timestamp })))
     }
-    const before = this.engine.snapshot()
-    const result = this.run(tx, commit, true, blockNumber, timestamp)
-    const block = commit ? this.makeBlock(blockNumber, latest.hash, [hash], result.gasUsed, timestamp) : {
-      ...latest, hash: keccak256(toUtf8Bytes(hash + ':call')), transactions: [hash],
-      timestamp: toQuantity(timestamp), gasUsed: toQuantity(result.gasUsed)
+    const result = commit ? this.run(tx, true, true, context) : this.withSnapshot(before, () => this.run(tx, false, true, context))
+    const block = commit ? this.makeBlock(blockNumber, context.parentHash, [hash], result.gasUsed, timestamp) : {
+      ...context, hash: keccak256(toUtf8Bytes(hash + ':call')), transactions: [hash], gasUsed: toQuantity(result.gasUsed)
     }
     if (commit) {
       this.blocks.push(block)
@@ -272,18 +325,22 @@ export class MonadProvider {
     return commit ? hash : result.returnValue
   }
 
-  private estimate(input: any) {
-    const tx = this.normalize(input)
-    const number = this.blocks.length
-    const timestamp = Math.floor(Date.now() / 1000)
+  private estimate(input: any, selector: unknown = 'pending') {
+    const context = this.resolveBlock(selector)
+    const before = this.snapshotAt(context)
+    const tx = this.normalize(input, before)
+    return this.withSnapshot(before, () => this.estimateAt(tx, context))
+  }
+
+  private estimateAt(tx: ReturnType<MonadProvider['normalize']>, context: any) {
     let high = tx.gas
     let low = 20_999
-    const initial = this.run(tx, false, false, number, timestamp)
+    const initial = this.run(tx, false, false, context)
     if (!initial.success) throw new RpcError(initial.error || 'Gas estimation failed', 3, initial.returnValue)
     while (high - low > 1) {
       const gas = Math.floor((high + low) / 2)
       try {
-        const result = this.run({ ...tx, gas }, false, false, number, timestamp)
+        const result = this.run({ ...tx, gas }, false, false, context)
         if (result.success) high = gas
         else low = gas
       } catch (error) {
@@ -305,8 +362,9 @@ export class MonadProvider {
     if (!isStakingAction(action)) throw new RpcError('Invalid staking action; expected snapshot, epochChange or reward with exact hex quantities')
     action = JSON.parse(JSON.stringify(action))
     const before = this.engine.snapshot()
-    const number = this.blocks.length
-    const timestamp = Math.floor(Date.now() / 1000)
+    const context = this.pendingBlock()
+    const number = Number(BigInt(context.number))
+    const timestamp = Number(BigInt(context.timestamp))
     const request: StakingRequest = { action, blockNumber: number, timestamp, commit: true }
     let result: StakingResult
     try { result = JSON.parse(this.engine.staking_transition(JSON.stringify(request))) } catch (error) {
@@ -346,7 +404,9 @@ export class MonadProvider {
     case 'eth_getCode': return this.account(getAddress(params[0]), params[1]).code
     case 'eth_getTransactionCount': return toQuantity(this.account(getAddress(params[0]), params[1]).nonce)
     case 'eth_getStorageAt': return this.account(getAddress(params[0]), params[2]).storage['0x' + BigInt(params[1]).toString(16).padStart(64, '0')] || ZeroHash
-    case 'eth_estimateGas': return this.estimate(params[0])
+    case 'eth_estimateGas':
+      if (params.length > 2) throw new RpcError('State and block overrides are not supported by the local Monad VM')
+      return this.estimate(params[0], params[1])
     case 'eth_sendTransaction': return this.execute(params[0], true)
     case 'eth_sendRawTransaction': {
       if (getBytes(params[0])[0] === 4) {
@@ -358,13 +418,13 @@ export class MonadProvider {
       return this.execute({ ...tx.toJSON(), from: tx.from, gas: tx.gasLimit }, true, tx)
     }
     case 'eth_call':
-      if (params[1] && params[1] !== 'latest' && params[1] !== 'pending') throw new RpcError('Historical eth_call is not supported in this local slice')
-      return this.execute(params[0], false)
+      if (params.length > 2) throw new RpcError('State and block overrides are not supported by the local Monad VM')
+      return this.execute(params[0], false, undefined, params[1])
     case 'eth_getTransactionByHash': return this.executions.get(params[0])?.tx || null
     case 'eth_getTransactionReceipt': return this.executions.get(params[0])?.receipt || null
     case 'eth_getBlockByNumber': case 'eth_getBlockByHash': {
       const block = this.block(params[0])
-      return block && { ...block, transactions: params[1] ? block.transactions.map(hash => this.recorded(hash).tx) : block.transactions }
+      return block && JSON.parse(JSON.stringify({ ...block, transactions: params[1] ? block.transactions.map(hash => this.recorded(hash).tx) : block.transactions }))
     }
     case 'eth_getLogs': {
       const filter = params[0] || {}

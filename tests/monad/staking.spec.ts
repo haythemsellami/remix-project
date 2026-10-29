@@ -114,6 +114,12 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
     expect(restored.stakingTransitions).toEqual(saved.stakingTransitions)
     expect(restored.executions).toEqual(saved.executions)
     const [from] = await rpc(page, 'eth_accounts')
+    for (const epoch of [0n, 1n, 2n]) {
+      const block = epoch === 0n ? restored.blocks[0] : restored.blocks.find(block => restored.stakingTransitions.some(([hash, record]) =>
+        hash === block.hash && record.action.kind === 'epochChange' && BigInt(record.action.epoch) === epoch))
+      const historical = await rpc(page, 'eth_call', { from, to: staking, data: abi.encodeFunctionData('getEpoch') }, { blockHash: block.hash })
+      expect(Array.from(abi.decodeFunctionResult('getEpoch', historical))).toEqual([epoch, false])
+    }
     const readEpoch = await rpc(page, 'eth_call', { from, to: staking, data: abi.encodeFunctionData('getEpoch') })
     expect(Array.from(abi.decodeFunctionResult('getEpoch', readEpoch))).toEqual([3n, false])
     for (const [hash, method, status, value] of [
