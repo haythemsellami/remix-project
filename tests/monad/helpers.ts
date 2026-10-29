@@ -42,13 +42,7 @@ async function prepareIde(page: Page, contractFile: string) {
   await page.route('**/console.sol', route => route.fulfill({ path: 'node_modules/hardhat/console.sol', contentType: 'text/plain' }))
   const unitTest = contractFile.endsWith('_test.sol')
   await page.goto(`/#activate=solidity,udapp,debugger,filePanel${unitTest ? ',solidityUnitTesting' : ''}&version=${compiler}`, { waitUntil: 'domcontentloaded' })
-  // Keep the resize handle aligned when debugging expands the panel; hover help must not cover controls.
-  await page.addStyleTag({ content: `
-    #side-panel { transition: none !important; }
-    [role="tooltip"] { pointer-events: none !important; }
-  ` })
-  await expect(page.locator('[data-id="workspaceloaded"]')).toBeAttached({ timeout: 60_000 })
-  await expect(page.locator('[data-id="apploaded"]')).toBeAttached()
+  await waitForIde(page)
   if (unitTest) await page.locator('#icon-panel div[plugin="filePanel"]').click()
   await expect(page.locator('[data-id="treeViewUltreeViewMenu"]')).toBeVisible()
   await page.locator('[data-id="fileExplorerLocalFileSystemUpload"]').setInputFiles(`libs/remix-monad/examples/${contractFile}`)
@@ -61,6 +55,17 @@ async function prepareIde(page: Page, contractFile: string) {
     await page.locator('[data-id="compilerContainerCompileBtn"]').click()
     await expect(page.locator('[data-id="compiledContracts"]')).toContainText(contractFile.replace('.sol', ''))
   }
+}
+
+export async function waitForIde(page: Page) {
+  // Reapply after reload: document styles do not survive navigation.
+  // Keep the resize handle aligned when debugging expands the panel; hover help must not cover controls.
+  await page.addStyleTag({ content: `
+    #side-panel { transition: none !important; }
+    [role="tooltip"] { pointer-events: none !important; }
+  ` })
+  await expect(page.locator('[data-id="workspaceloaded"]')).toBeAttached({ timeout: 60_000 })
+  await expect(page.locator('[data-id="apploaded"]')).toBeAttached()
 }
 
 export async function selectEnvironment(page: Page, fork: Fork) {
