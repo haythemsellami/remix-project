@@ -66,7 +66,7 @@ export function AccountUI(props: AccountProps) {
 
   useEffect(() => {
     const run = async () => {
-      if (selectExEnv !== 'vm-osaka' && selectExEnv !== 'vm-prague' && selectExEnv !== 'vm-mainnet-fork') {
+      if (!['vm-osaka', 'vm-prague', 'vm-mainnet-fork', 'vm-monad-ten', 'vm-monad-next'].includes(selectExEnv)) {
         setEnableDelegationAuthorization(false)
         setContractHasDelegation(false)
         delegationAuthorizationAddressRef.current = null

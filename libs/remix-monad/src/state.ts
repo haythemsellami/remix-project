@@ -57,6 +57,7 @@ function validateTrace(value: any) {
   }
   if (Object.entries(value.preimages).some(([key, value]) => !/^[\da-f]{64}$/i.test(key) || typeof value !== 'string' || !/^(?:[\da-f]{2})*$/i.test(value))) invalid('malformed hash preimage')
   if (value.consoleCalls !== undefined && (!Array.isArray(value.consoleCalls) || value.consoleCalls.some(call => !hex(call)))) invalid('malformed console calls')
+  if (value.codeByAddress !== undefined && (!object(value.codeByAddress) || Object.entries(value.codeByAddress).some(([address, code]) => !/^0x[\da-f]{40}$/i.test(address) || !hex(code)))) invalid('malformed executed code')
 }
 
 /** Validate and detach imported data before replacing any live provider state. */
@@ -84,6 +85,7 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
     if (!hash(id) || !object(record) || !object(record.tx) || !object(record.receipt) || !object(record.block) || !object(record.result) || record.tx.hash !== id || record.receipt.transactionHash !== id || record.block.hash !== record.tx.blockHash || record.receipt.blockHash !== record.block.hash || !hash(record.block.hash)) invalid('malformed execution record')
     const result = record.result
     if (typeof result.success !== 'boolean' || !hex(result.returnValue) || !integer(result.gasUsed) || !integer(result.gasSpent) || !Array.isArray(result.logs) || !Array.isArray(record.receipt.logs) || typeof result.traceTruncated !== 'boolean') invalid('malformed execution result')
+    if (result.authorizationAuthorities !== undefined && (!Array.isArray(result.authorizationAuthorities) || result.authorizationAuthorities.some(address => typeof address !== 'string' || !/^0x[\da-f]{40}$/i.test(address)))) invalid('malformed authorization authorities')
     validateTrace(result)
     snapshot(record.before, spec)
     snapshot(record.after, spec)
