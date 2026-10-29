@@ -19,3 +19,5 @@ Build the IDE again after changing application or library sources. Reports and f
 Validate saved snapshots and restore call history; cover nested calls, delegated storage, revert rollback, and debugger navigation.
 
 Expose console output and EIP-712 signing; exercise IDE Solidity tests, JavaScript/TypeScript scripts, and debugging their transactions.
+
+Test CREATE/CREATE2, linked libraries, child constructors, precompile results and failures, and browser debugging on both forks.
