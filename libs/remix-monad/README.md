@@ -54,7 +54,7 @@ Execution returns status, return data, logs, created address, gas accounting and
 
 Both debugger decoders explicitly map `monad-ten` and `monad-next` to EthereumJS's Osaka opcode baseline, matching `MonadHardfork::into_eth_spec` in `monad-revm`. The original Monad fork controls extension decoding; execution, gas accounting and state remain in Rust/WASM. Other fork names pass through EthereumJS validation, so unsupported Monad forks are rejected.
 
-This local chain has ID **1337**, five funded development accounts with **100 MON** each, a 30 million transaction gas cap and zero base fee. Transactions support legacy and EIP-1559 formats. These are local simulation settings, not public Monad network configuration.
+This local chain has ID **1337**, five funded development accounts with **100 MON** each, a 30 million transaction gas cap and zero base fee. Transactions support legacy, EIP-2930 access lists, EIP-1559 and EIP-7702 delegation. These are local simulation settings, not public Monad network configuration.
 
 Monad charges the submitted transaction gas limit. Receipts use `tx_gas_used()`; consumption uses `total_gas_spent()`. Estimation searches for a successful gas limit without committing state. Gas-sensitive contracts can be non-monotonic, so estimation is not a guarantee that a different future state will execute identically.
 
@@ -64,6 +64,8 @@ The Solidity Unit Testing plugin uses the selected Monad VM. Test results and co
 
 JavaScript and TypeScript scripts use the selected Monad provider through Remix's Ethers v6 runner. The provider supports message and EIP-712 signing, including the file explorer's signing action. See [scripts and signing](docs/scripts-and-signing.md) for examples and debugging instructions.
 
+The account menu's existing delegation controls also work on both Monad forks. See [typed transactions and delegation](docs/transactions.md) for access lists, signed transactions, reserve rules and debugging after revocation.
+
 [FactoryDeployments.sol](examples/FactoryDeployments.sol) exercises linked libraries and child contracts. Deploy `FactoryDeployments` to have Remix deploy and link `LinkedValues`, then use `create` or `create2` to deploy a child. Select `FactoryChild`, open **Deployed Contracts → Add Contract**, and enter `lastChild()`'s address to interact with it. Debug the factory transaction to inspect its child constructor, or call `storeWithLibrary` on the child and debug its library call. `rejectCreate2` catches a constructor revert, leaving its failed execution available in the debugger.
 
 ## Current coverage and limits
@@ -72,8 +74,8 @@ Native Rust and packed-installation tests live with `monad-revmjs`. This reposit
 
 This is the first local execution and debugging slice. Remaining work includes:
 
-- Remote RPC forking, historical `eth_call`, and canonical replay context, including reserve-balance metadata and staking system inputs.
-- Access-list, authorization and blob transaction workflows; routing the Remix test CLI to this backend.
+- Remote RPC forking, historical `eth_call`, and canonical replay context, including remote reserve-balance metadata and staking system inputs.
+- Routing the Remix test CLI to this backend. Blob transactions remain unsupported by Monad.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
 - Stateful system-contract conformance tests, cancellation, and registry release automation. Stateless precompile parity runs in the engine repository; [Remix precompile debugging](docs/testing.md) runs on both Monad forks.
