@@ -68,6 +68,8 @@ The account menu's existing delegation controls also work on both Monad forks. S
 
 Local staking workflows support explicit epoch transitions and validator rewards. See [staking](docs/staking.md) for the runnable example, setup controls and debugging across save/reset/restore.
 
+Contract calls and estimates can use retained local blocks, with historical state, block context and debugging. See [historical calls](docs/historical-calls.md) for block selectors and the runnable Ethers example.
+
 [FactoryDeployments.sol](examples/FactoryDeployments.sol) exercises linked libraries and child contracts. Deploy `FactoryDeployments` to have Remix deploy and link `LinkedValues`, then use `create` or `create2` to deploy a child. Select `FactoryChild`, open **Deployed Contracts → Add Contract**, and enter `lastChild()`'s address to interact with it. Debug the factory transaction to inspect its child constructor, or call `storeWithLibrary` on the child and debug its library call. `rejectCreate2` catches a constructor revert, leaving its failed execution available in the debugger.
 
 ## Current coverage and limits
@@ -76,7 +78,7 @@ Native Rust and packed-installation tests live with `monad-revmjs`. This reposit
 
 This is the first local execution and debugging slice. Remaining work includes:
 
-- Remote RPC forking, historical `eth_call`, and canonical replay context, including remote reserve-balance metadata and staking system inputs.
+- Remote RPC forking and canonical replay context, including remote reserve-balance metadata and staking system inputs.
 - Routing the Remix test CLI to this backend. Blob transactions remain unsupported by Monad.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
