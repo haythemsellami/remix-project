@@ -1,5 +1,6 @@
 import { Wallet } from 'ethers'
 import { EngineResult, MonadSpec, RpcError } from './types'
+import type { StakingAction, StakingResult } from 'monad-revmjs'
 
 export interface RecordedExecution {
   tx: any
@@ -18,8 +19,16 @@ export interface SavedState {
   keys: string[]
   blocks: any[]
   executions: [string, RecordedExecution][]
+  stakingTransitions: [string, RecordedStakingTransition][]
   tags: [string, string][]
   callCounter: number
+}
+
+export interface RecordedStakingTransition {
+  action: StakingAction
+  result: StakingResult
+  before: string
+  after: string
 }
 
 const object = (value: any) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -27,6 +36,15 @@ const hex = (value: any) => typeof value === 'string' && /^0x(?:[\da-f]{2})*$/i.
 const hash = (value: any) => typeof value === 'string' && /^0x[\da-f]{64}$/i.test(value)
 const integer = (value: any) => Number.isSafeInteger(value) && value >= 0
 const invalid = (detail: string): never => { throw new RpcError(`Invalid saved Monad state: ${detail}`) }
+
+export function isStakingAction(action: any): action is StakingAction {
+  if (!object(action)) return false
+  const quantity = (value: any) => typeof value === 'string' && /^0x[\da-f]+$/i.test(value)
+  const keys = Object.keys(action).sort().join(',')
+  return (action.kind === 'snapshot' && keys === 'kind') ||
+    (action.kind === 'epochChange' && keys === 'epoch,kind' && quantity(action.epoch) && BigInt(action.epoch) < 0xffffffffffffffffn) ||
+    (action.kind === 'reward' && keys === 'amount,author,kind' && quantity(action.amount) && BigInt(action.amount) < (1n << 256n) && /^0x[\da-f]{40}$/i.test(action.author))
+}
 
 function pairs(value: any, name: string): [string, any][] {
   if (!Array.isArray(value) || value.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') || new Set(value.map(entry => entry[0])).size !== value.length) {
@@ -79,8 +97,20 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   }
   if (!Array.isArray(state.blocks) || !state.blocks.length) invalid('missing local blocks')
   for (const [index, block] of state.blocks.entries()) {
-    if (!object(block) || block.number !== '0x' + index.toString(16) || !hash(block.hash) || !Array.isArray(block.transactions) || block.transactions.length !== (index === 0 ? 0 : 1) || (index > 0 && block.parentHash !== state.blocks[index - 1].hash)) invalid('malformed local block chain')
+    if (!object(block) || block.number !== '0x' + index.toString(16) || !hash(block.hash) || !Array.isArray(block.transactions) || block.transactions.length > 1 || (index === 0 && block.transactions.length !== 0) || (index > 0 && block.parentHash !== state.blocks[index - 1].hash)) invalid('malformed local block chain')
   }
+  const stakingTransitions = pairs(state.stakingTransitions ?? [], 'staking transitions').map(([id, record]): [string, RecordedStakingTransition] => {
+    if (!hash(id) || !object(record) || !object(record.action) || !object(record.result)) invalid('malformed staking transition')
+    if (!isStakingAction(record.action)) invalid('malformed staking action')
+    const result = record.result
+    if (result.success !== true || result.error !== null || !hex(result.returnValue) || !integer(result.gasSpent) || !Array.isArray(result.logs) || result.logs.some(log => !object(log) || !/^0x[\da-f]{40}$/i.test(log.address) || !hex(log.data) || !Array.isArray(log.topics) || log.topics.some(topic => !hash(topic)))) invalid('malformed staking result')
+    snapshot(record.before, spec)
+    snapshot(record.after, spec)
+    const block = state.blocks.find(block => block.hash === id)
+    if (!block || block.number === '0x0' || block.transactions.length || block.gasUsed !== '0x0') invalid('staking transition references an inconsistent block')
+    return [id, record]
+  })
+  const transitions = new Map(stakingTransitions)
   const executions = pairs(state.executions, 'executions').map(([id, record]): [string, RecordedExecution] => {
     if (!hash(id) || !object(record) || !object(record.tx) || !object(record.receipt) || !object(record.block) || !object(record.result) || record.tx.hash !== id || record.receipt.transactionHash !== id || record.block.hash !== record.tx.blockHash || record.receipt.blockHash !== record.block.hash || !hash(record.block.hash)) invalid('malformed execution record')
     const result = record.result
@@ -93,6 +123,7 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   })
   const records = new Map(executions)
   for (const block of state.blocks) {
+    if (block.number !== '0x0' && !block.transactions.length && !transitions.has(block.hash)) invalid('block references a missing staking transition')
     for (const id of block.transactions) {
       const record = records.get(id)
       if (!record || record.tx.blockHash !== block.hash || record.tx.blockNumber !== block.number) invalid('block references a missing or inconsistent transaction')
@@ -102,6 +133,7 @@ export function readState(input: unknown, spec: MonadSpec): SavedState {
   if (tags.some(([, id]) => !records.has(id))) invalid('call tag references an unknown execution')
   // Older version 1 saves omit call metadata. Start above their recorded call count.
   const callCounter = state.callCounter === undefined ? executions.length : state.callCounter
-  if (!integer(callCounter) || callCounter < executions.length - state.blocks.length + 1) invalid('invalid call counter')
-  return { backend: 'monad-revm', version: 1, spec, engine: state.engine, keys: state.keys, blocks: state.blocks, executions, tags, callCounter }
+  const transactions = state.blocks.reduce((count, block) => count + block.transactions.length, 0)
+  if (!integer(callCounter) || callCounter < executions.length - transactions) invalid('invalid call counter')
+  return { backend: 'monad-revm', version: 1, spec, engine: state.engine, keys: state.keys, blocks: state.blocks, executions, stakingTransitions, tags, callCounter }
 }
