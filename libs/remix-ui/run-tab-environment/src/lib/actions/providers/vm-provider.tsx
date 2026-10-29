@@ -179,3 +179,12 @@ export class ForkedVMStateProvider extends BasicVMProvider {
     this.blockNumber = blockNumber
   }
 }
+
+export class MonadVMProvider extends BasicVMProvider {
+  constructor(blockchain, fork: 'monad-ten' | 'monad-next') {
+    const displayName = fork === 'monad-next' ? 'Monad Next (experimental)' : 'Monad Ten'
+    super({ name: 'vm-' + fork, displayName, kind: 'provider', description: displayName,
+      methods: ['sendAsync', 'init'], version: packageJson.version }, blockchain)
+    this.fork = fork
+  }
+}

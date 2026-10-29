@@ -17,6 +17,7 @@ export class Provider {
     this.request(query).then(result => callback(null, result), error => callback(error, null))
   }
 }
+export const MonadProvider = Provider
 `
 
 let client: string
@@ -28,7 +29,7 @@ test.beforeAll(async () => {
     plugins: [{
       name: 'test-simulator',
       setup(plugin) {
-        plugin.onResolve({ filter: /^@remix-project\/remix-simulator$/ }, () => ({ path: 'simulator', namespace: 'fixture' }))
+        plugin.onResolve({ filter: /^@remix-project\/remix-(simulator|monad)$/ }, () => ({ path: 'simulator', namespace: 'fixture' }))
         plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: simulator, loader: 'js' }))
       }
     }]
