@@ -78,7 +78,7 @@ Event queries and polling filters support Ethers listeners through the script ru
 
 Native Rust and packed-installation tests live with `monad-revmjs`. This repository's WASM integration tests consume the installed package, compile the example with solc and exercise the provider through ethers and Remix's debugger, including source-map indexing, nested calls, symbolic stack effects, call debugging, history, signed transactions and trace limits.
 
-This is the first local execution and debugging slice. Remaining work includes:
+This experimental local VM has the following limits and follow-up work:
 
 - Remote RPC forking and canonical replay context, including remote reserve-balance metadata and staking system inputs.
 - Routing the Remix test CLI to this backend. Blob transactions remain unsupported by Monad.
