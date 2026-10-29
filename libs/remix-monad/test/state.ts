@@ -55,7 +55,7 @@ test('save and restore preserve earlier transaction and call debugging after lat
       assert.equal(await restored.request('eth_getStorageAt', address, '0x0', firstReceipt.blockNumber), hashFor(11))
       assert.deepEqual(await restored.request('eth_getTransactionReceipt', first), firstReceipt)
       assert.equal((await restored.request('eth_getBlockByNumber', firstReceipt.blockNumber, true)).transactions[0].hash, first)
-      assert.equal((await restored.request('eth_getLogs', {})).length, 2, 'simulated logs never enter committed block history')
+      assert.equal((await restored.request('eth_getLogs', { fromBlock: 'earliest' })).length, 2, 'simulated logs never enter committed block history')
       assert.equal(await restored.request('debug_preimage', keccak256(hashFor(11))), hashFor(11).slice(2))
       const receipt = await restored.request('eth_getTransactionReceipt', second)
       const storage = await restored.request('debug_storageRangeAt', receipt.blockHash, 0, address)
