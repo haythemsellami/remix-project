@@ -7,6 +7,7 @@ import { RpcError } from './types'
 import { isStakingAction, readState, RecordedExecution, RecordedStakingTransition } from './state'
 import { decodeConsoleCalls } from './console'
 import { decodeDelegatedTransaction, signDelegatedTransaction, SignedEnvelope } from './transaction'
+import { MonadFilters } from './filters'
 
 const CHAIN_ID = 1337
 const GAS_LIMIT = 30_000_000
@@ -38,6 +39,7 @@ export class MonadProvider {
   private callCounter = 0
   private queue: Promise<unknown> = Promise.resolve()
   private initialized = false
+  private filters = new MonadFilters(() => this.blocks, block => block.transactions.flatMap(hash => this.recorded(hash).receipt.logs))
   readonly options: MonadProviderOptions
 
   readonly Accounts = {
@@ -426,15 +428,16 @@ export class MonadProvider {
       const block = this.block(params[0])
       return block && JSON.parse(JSON.stringify({ ...block, transactions: params[1] ? block.transactions.map(hash => this.recorded(hash).tx) : block.transactions }))
     }
-    case 'eth_getLogs': {
-      const filter = params[0] || {}
-      const from = filter.fromBlock ? Number(BigInt(filter.fromBlock === 'latest' ? this.blocks.length - 1 : filter.fromBlock)) : 0
-      const to = !filter.toBlock || filter.toBlock === 'latest' ? this.blocks.length - 1 : Number(BigInt(filter.toBlock))
-      const addresses = filter.address ? (Array.isArray(filter.address) ? filter.address : [filter.address]).map(address => address.toLowerCase()) : null
-      return this.blocks.filter(block => filter.blockHash ? block.hash === filter.blockHash : Number(BigInt(block.number)) >= from && Number(BigInt(block.number)) <= to)
-        .flatMap(block => block.transactions.flatMap(hash => this.recorded(hash).receipt.logs))
-        .filter(log => (!addresses || addresses.includes(log.address.toLowerCase())) && (!filter.topics || filter.topics.every((topic, index) => topic === null || (Array.isArray(topic) ? topic.includes(log.topics[index]) : topic === log.topics[index]))))
-    }
+    case 'eth_getLogs': case 'eth_newFilter': case 'eth_getFilterChanges': case 'eth_getFilterLogs': case 'eth_uninstallFilter':
+      if (params.length !== 1) throw new RpcError(`Expected one parameter for ${method}`)
+      if (method === 'eth_getLogs') return this.filters.getLogs(params[0])
+      if (method === 'eth_newFilter') return this.filters.newFilter(params[0])
+      if (method === 'eth_getFilterChanges') return this.filters.getFilterChanges(params[0])
+      if (method === 'eth_getFilterLogs') return this.filters.getFilterLogs(params[0])
+      return this.filters.uninstallFilter(params[0])
+    case 'eth_newBlockFilter':
+      if (params.length) throw new RpcError('Expected no parameters for eth_newBlockFilter')
+      return this.filters.newBlockFilter()
     case 'eth_registerCallId': this.callId = params[0]; return null
     case 'eth_getHashFromTagBySimulator': return this.tags.get(String(params[0])) || null
     case 'eth_getHHLogsForTx': return decodeConsoleCalls(this.executions.get(params[0])?.result.consoleCalls)

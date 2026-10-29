@@ -155,7 +155,7 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await assert.rejects(f.call(address, a.blockNumber, 'reject'), error => error instanceof RpcError && error.code === 3 && error.data === abi.encodeErrorResult('Rejected', [1]))
       const reverted = await f.request('eth_getHashFromTagBySimulator', 'historical-revert')
       assert.equal(f.engine.snapshot(), current)
-      assert.equal((await f.request('eth_getLogs', {})).length, 2, 'simulated logs do not enter canonical history')
+      assert.equal((await f.request('eth_getLogs', { fromBlock: 'earliest' })).length, 2, 'simulated logs do not enter canonical history')
       await inspect(f, success, 1n, 11n)
       await inspect(f, reverted, 1n, 99n)
       const beforeInvalid = f.engine.snapshot()

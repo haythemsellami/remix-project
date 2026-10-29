@@ -70,6 +70,8 @@ Local staking workflows support explicit epoch transitions and validator rewards
 
 Contract calls and estimates can use retained local blocks, with historical state, block context and debugging. See [historical calls](docs/historical-calls.md) for block selectors and the runnable Ethers example.
 
+Event queries and polling filters support Ethers listeners through the script runner. See [events and polling filters](docs/events.md) for query semantics, listener cleanup, saved history and debugging event emission.
+
 [FactoryDeployments.sol](examples/FactoryDeployments.sol) exercises linked libraries and child contracts. Deploy `FactoryDeployments` to have Remix deploy and link `LinkedValues`, then use `create` or `create2` to deploy a child. Select `FactoryChild`, open **Deployed Contracts → Add Contract**, and enter `lastChild()`'s address to interact with it. Debug the factory transaction to inspect its child constructor, or call `storeWithLibrary` on the child and debug its library call. `rejectCreate2` catches a constructor revert, leaving its failed execution available in the debugger.
 
 ## Current coverage and limits

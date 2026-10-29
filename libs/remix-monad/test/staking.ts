@@ -158,7 +158,7 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       assert.equal(abi.parseLog(withdrawn.receipt.logs[0]).args.amount, stake)
       assert.equal(BigInt(await restored.request('eth_getBalance', f.address)), stake + parseEther('5'))
       assert.equal(BigInt(await restored.request('eth_getBalance', staking)), stake + parseEther('5'))
-      const logs = await restored.request('eth_getLogs', { address: staking, topics: [abi.getEvent('Withdraw').topicHash]})
+      const logs = await restored.request('eth_getLogs', { address: staking, fromBlock: 'earliest', topics: [abi.getEvent('Withdraw').topicHash]})
       assert.deepEqual(logs, [withdrawn.receipt.logs[0]])
       await inspect(restored, staked.hash, f.address, true, 0n, 42n)
       await inspect(restored, early.hash, f.address, false, 42n, 11n)
