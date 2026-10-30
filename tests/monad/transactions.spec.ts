@@ -1,5 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { Interface } from 'ethers'
 import { test, selectEnvironment, deploy, openContract, debugTransaction, currentOpcode, showOpcodes, step } from './helpers'
 
 test.use({ contractFile: 'DelegatedAccount.sol', scriptRunner: true })
@@ -96,6 +97,17 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
     await expect(terminal).toContainText(output, { timeout: 90_000 })
     const [, authority, delegated, access, failed] = (await terminal.innerText()).match(output)
     expect(await rpc(page, 'eth_getCode', authority)).toBe('0x')
+    const [from] = await rpc(page, 'eth_accounts')
+    const historical = await rpc(page, 'eth_getTransactionReceipt', delegated)
+    const abi = new Interface(['function store(uint256)'])
+    const live = (await rpc(page, 'eth_getStateDb')).engine
+    await rpc(page, 'eth_registerCallId', 'before-revocation')
+    await rpc(page, 'eth_call', { from, to: authority, data: abi.encodeFunctionData('store', [88]) }, { blockHash: historical.blockHash, requireCanonical: true })
+    const call = await rpc(page, 'eth_getHashFromTagBySimulator', 'before-revocation')
+    expect((await rpc(page, 'eth_getStateDb')).engine).toBe(live)
+    expect(await rpc(page, 'eth_getCode', authority)).toBe('0x')
+    await debugHash(page, call)
+    await inspectStore(page, 88)
     for (const [hash, value, type] of [[delegated, 42, '0x4'], [access, 77, '0x1']] as const) {
       expect((await rpc(page, 'eth_getTransactionByHash', hash)).type).toBe(type)
       await debugHash(page, hash)

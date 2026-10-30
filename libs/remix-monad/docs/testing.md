@@ -25,3 +25,5 @@ Test CREATE/CREATE2, linked libraries, child constructors, precompile results an
 Handle typed signed transactions and reserve history; enable delegation controls and debug delegated code, invalid authorization tuples and revocation.
 
 Expose explicit local staking transitions, persist their state, and test rewards, withdrawals and failed staking calls through scripts and the debugger.
+
+Select retained local blocks for reads, calls and estimation; preserve historical execution context and debug successful and reverted simulations.
