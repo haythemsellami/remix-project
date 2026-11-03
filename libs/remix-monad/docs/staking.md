@@ -1,6 +1,6 @@
 # Staking in the local Monad VM
 
-Select **Monad Ten** or **Monad Next**, compile [StakingDemo.sol](../examples/StakingDemo.sol),
+In **Deploy & Run**, select **Monad VM**, then **Monad Ten** or **Monad Next (experimental)**. Compile [StakingDemo.sol](../examples/StakingDemo.sol),
 then run [staking-workflow.js](../examples/staking-workflow.js) with the Ethers v6 runner
 in a fresh VM. The script funds a local account, registers a validator, delegates,
 advances epochs, claims rewards and withdraws. It also exercises an early withdrawal
