@@ -34,7 +34,7 @@ async function selectSavedOrLocal(page: Page, category: string, name: string) {
   })
 }
 
-for (const fork of ['monad-next', 'monad-ten'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-next', 'monad-ten'] as const) {
   test(`${fork}: save, reset and restore through the IDE`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page)

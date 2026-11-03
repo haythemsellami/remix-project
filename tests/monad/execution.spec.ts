@@ -5,7 +5,7 @@ import { test, selectEnvironment, deploy, debugTransaction, showOpcodes, current
 const source = readFileSync('libs/remix-monad/examples/MonadDemo.sol', 'utf8')
 const storeLine = source.split('\n').findIndex(line => line.includes('value = newValue;')) + 1
 
-for (const fork of ['monad-next', 'monad-ten', 'osaka'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-next', 'monad-ten', 'osaka'] as const) {
   test(`${fork}: deploy, store and debug through the IDE`, async ({ page }) => {
     await test.step('Deploy and navigate constructor instructions in both directions', async () => {
       await selectEnvironment(page, fork)

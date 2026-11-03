@@ -3,15 +3,7 @@ import { util } from '@remix-project/remix-lib'
 import { Common, Mainnet } from '@ethereumjs/common'
 import { getOpcodesForHF, paramsEVM } from '@ethereumjs/evm'
 import getOpcodes from './opcodes'
-import { monadOpcodeAt } from './monadOpcodes'
-
-// monad-revm's MonadHardfork::into_eth_spec uses Osaka for MonadTen and MonadNext.
-// This selects standard debugger opcode metadata. The original Monad fork controls
-// extension decoding; execution and gas accounting remain in monad-revmjs.
-const MONAD_OPCODE_BASE_HARDFORKS = new Map([
-  ['monad-ten', 'osaka'],
-  ['monad-next', 'osaka']
-])
+import { monadOpcodeAt, MONAD_OPCODE_BASE_HARDFORKS } from './monadOpcodes'
 
 function getOpcodeTable (hardfork: string) {
   const opcodeBaseHardfork = MONAD_OPCODE_BASE_HARDFORKS.get(hardfork) ?? hardfork

@@ -2,7 +2,7 @@
 
 This experimental integration executes contracts through the prebuilt `monad-revmjs` WebAssembly package, inside Remix's existing VM Web Worker. The package owns execution and state; the TypeScript provider adapts results to Remix's transaction, account and debugger interfaces.
 
-The Rust wrapper, its native tests, bindings and package build live on `category-labs/monad-revm`'s **main** branch in [`crates/monad-revmjs`](https://github.com/category-labs/monad-revm/tree/main/crates/monad-revmjs). Remix pins a complete commit from that repository's `monad-revmjs-preview` distribution branch in `package.json` and `yarn.lock`. The distribution contains a ready-to-use npm package; its `build-info.json` records the source commit and build inputs. This preview can later be replaced by an exact npm registry version without changing the provider API.
+The Rust wrapper, its native tests, bindings and package build live on `category-labs/monad-revm`'s **main** branch in [`crates/monad-revmjs`](https://github.com/category-labs/monad-revm/tree/main/crates/monad-revmjs). Remix pins a complete commit from a prebuilt package branch in that repository in `package.json` and `yarn.lock`. The distribution contains a ready-to-use npm package; its `build-info.json` records the source commit and build inputs. This preview can later be replaced by an exact npm registry version without changing the provider API.
 
 ## Build and test
 
@@ -36,7 +36,7 @@ For engine changes, build and test `crates/monad-revmjs` in the engine repositor
 
 The constructor deploys an eight-byte oracle with runtime `ae005f5260205ff3`. `AE 00` is one extension instruction. It returns depth zero at the root of execution and one when called from `MonadDemo`. Solidity does not need to recognize a new builtin to deploy this bytecode.
 
-**Monad Ten** is also available under **Monad VM**. It executes ordinary Solidity contracts but rejects the extension when `recordDepth()` reaches the oracle. **Monad Next** enables `CALLSTACKDEPTH` and `CALLERN` according to the pinned engine revision; it is explicitly experimental. The menu lists the Ten and Next specifications exposed by the pinned `monad-revmjs` package. Exposing the Rust engine's earlier Eight and Nine hardforks requires WASM wrapper support and Remix validation.
+**Monad Ten** is also available under **Monad VM**. It executes ordinary Solidity contracts but rejects the extension when `recordDepth()` reaches the oracle. **Monad Next** enables `CALLSTACKDEPTH` and `CALLERN` according to the pinned engine revision; it is explicitly experimental. The menu also offers **Monad Nine** and **Monad Eight**. Eight uses the Prague baseline; Nine, Ten and Next use Osaka. Compile ordinary Solidity contracts for Cancun or Prague when targeting Eight. `CLZ` is available from Nine, while the extension instructions remain exclusive to Next.
 
 ## Execution and debugging boundary
 
@@ -50,9 +50,9 @@ Remix deploy / call / debug
 
 The package API provides account funding and reads, execution with or without commit, block hashes, and versioned snapshot export/import. Inputs use JSON with exact hex quantities for 256-bit values. Remix supplies the local block gas limit, base fee, beneficiary and prevrandao explicitly. The provider serializes requests so transactions cannot race over nonces or state.
 
-Execution returns status, return data, logs, created address, gas accounting and optional instruction traces. Traces contain the state **before** each instruction, real bytecode PCs, stack, memory, call depth, gas cost, and errors. Debugger changes preserve the two-byte extension encoding and its stack effects. Monad Ten and Next traces identify their specification explicitly.
+Execution returns status, return data, logs, created address, gas accounting and optional instruction traces. Traces contain the state **before** each instruction, real bytecode PCs, stack, memory, call depth, gas cost, and errors. Debugger changes preserve the two-byte extension encoding and its stack effects. All four Monad forks identify their specification explicitly in traces.
 
-Both debugger decoders explicitly map `monad-ten` and `monad-next` to EthereumJS's Osaka opcode baseline, matching `MonadHardfork::into_eth_spec` in `monad-revm`. The original Monad fork controls extension decoding; execution, gas accounting and state remain in Rust/WASM. Other fork names pass through EthereumJS validation, so unsupported Monad forks are rejected.
+Both debugger decoders explicitly map `monad-eight` to EthereumJS's Prague opcode baseline and `monad-nine`, `monad-ten` and `monad-next` to Osaka, matching `MonadHardfork::into_eth_spec` in `monad-revm`. The original Monad fork controls extension decoding; execution, gas accounting and state remain in Rust/WASM. Other fork names pass through EthereumJS validation, so unsupported Monad forks are rejected.
 
 This local chain has ID **1337**, five funded development accounts with **100 MON** each, a 30 million transaction gas cap and zero base fee. Transactions support legacy, EIP-2930 access lists, EIP-1559 and EIP-7702 delegation. These are local simulation settings, not public Monad network configuration.
 
@@ -64,7 +64,7 @@ The Solidity Unit Testing plugin uses the selected Monad VM. Test results and co
 
 JavaScript and TypeScript scripts use the selected Monad provider through Remix's Ethers v6 runner. The provider supports message and EIP-712 signing, including the file explorer's signing action. See [scripts and signing](docs/scripts-and-signing.md) for examples and debugging instructions.
 
-The account menu's existing delegation controls also work on both Monad forks. See [typed transactions and delegation](docs/transactions.md) for access lists, signed transactions, reserve rules and debugging after revocation.
+The account menu's existing delegation controls also work on all four Monad forks. See [typed transactions and delegation](docs/transactions.md) for access lists, signed transactions, reserve rules and debugging after revocation.
 
 Local staking workflows support explicit epoch transitions and validator rewards. See [staking](docs/staking.md) for the runnable example, setup controls and debugging across save/reset/restore.
 
@@ -84,6 +84,6 @@ This experimental local VM has the following limits and follow-up work:
 - Routing the Remix test CLI to this backend. Blob transactions remain unsupported by Monad.
 - A custom compiler or native Solidity syntax for extension instructions. Raw-bytecode examples have no Solidity source map for the extension itself.
 - Production persistence and memory management. Each trace is capped at 100,000 steps or approximately 32 MiB, and incomplete traces fail explicitly. Local history retains snapshots and traces until reset; aggregate history is not yet bounded.
-- Cancellation and registry release automation. Native/WASM parity covers stateless precompiles and local staking; [Remix debugging tests](docs/testing.md) run on both Monad forks. Canonical system-transition scheduling remains outside the local simulator.
+- Cancellation and registry release automation. Native/WASM parity covers stateless precompiles and local staking; [Remix debugging tests](docs/testing.md) include all four Monad forks. Canonical system-transition scheduling remains outside the local simulator.
 
 Blocks and receipts are synthetic local records. State, transaction and receipt roots and blooms are placeholders; they are not cryptographic proofs or full-node RPC equivalents. Calls have separate synthetic records for debugging and do not alter canonical local blocks or committed state. Unsupported RPC methods return an explicit error.

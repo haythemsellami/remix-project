@@ -70,5 +70,21 @@
     "gas": 6900,
     "success": true,
     "source": "Constructed known-answer vector"
+  },
+  {
+    "name": "modexp-small",
+    "address": 5,
+    "input": "0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001030507",
+    "output": "0x05",
+    "gas": 500,
+    "success": true,
+    "source": "3**5 mod 7 = 5; Osaka EIP-7883 minimum gas; Prague EIP-2565 minimum gas is 200",
+    "forks": {
+      "monad-eight": {
+        "gas": 200,
+        "success": true,
+        "output": "0x05"
+      }
+    }
   }
 ]

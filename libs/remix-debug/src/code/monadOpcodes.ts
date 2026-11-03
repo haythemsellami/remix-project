@@ -1,3 +1,17 @@
+// Match monad-revm's MonadHardfork::into_eth_spec: Eight uses Prague; Nine and later use Osaka.
+// This selects standard debugger opcode metadata. The original Monad fork controls
+// extension decoding; execution and gas accounting remain in monad-revmjs.
+export const MONAD_OPCODE_BASE_HARDFORKS = new Map([
+  ['monad-eight', 'prague'],
+  ['monad-nine', 'osaka'],
+  ['monad-ten', 'osaka'],
+  ['monad-next', 'osaka']
+])
+
+export function isMonadFork(fork: unknown): boolean {
+  return typeof fork === 'string' && MONAD_OPCODE_BASE_HARDFORKS.has(fork)
+}
+
 /** MIP-7 extension selectors, active only in MonadNext. */
 const MONAD_OPCODES = [
   { name: 'CALLSTACKDEPTH', in: 0, out: 1 },

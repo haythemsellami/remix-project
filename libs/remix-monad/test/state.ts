@@ -81,7 +81,7 @@ test('trace readers cannot mutate debugging data included in saved state', async
 
 test('save, fresh reset and restore preserve accounts, state and call debugging', async context => {
   context.mock.method(Date, 'now', () => 1_800_000_000_000)
-  for (const fork of ['monad-ten', 'monad-next'] as const) {
+  for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
     const f = await fixture({ fork })
     try {
       const key = Wallet.createRandom().privateKey

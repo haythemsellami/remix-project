@@ -2,7 +2,7 @@ import { expect, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { waitForIde, selectEnvironment, deploy, openContract, transact, showOpcodes, seekOpcode, step } from './helpers'
 
-export type Fork = 'monad-ten' | 'monad-next' | 'osaka'
+export type Fork = 'monad-eight' | 'monad-nine' | 'monad-ten' | 'monad-next' | 'osaka'
 const source = readFileSync('libs/remix-monad/examples/MonadDemo.sol', 'utf8')
 const storeLine = source.split('\n').findIndex(line => line.includes('value = newValue;')) + 1
 export const rpc = (page: Page, method: string, ...params: any[]) => page.evaluate(

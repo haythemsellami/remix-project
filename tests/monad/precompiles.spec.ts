@@ -35,7 +35,7 @@ async function decodedValue(page: Page, value: number) {
   await expect(state.locator('[data-id="value-json-nested"] [data-id="value-json-value"]')).toHaveText(`"${value}"`)
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: debug precompile return data, rejected inputs and gas exhaustion`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page, 'PrecompileCalls')

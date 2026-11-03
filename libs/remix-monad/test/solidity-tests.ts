@@ -19,7 +19,7 @@ const filename = 'MonadUnit_test.sol'
 const source = readFileSync(`libs/remix-monad/examples/${filename}`, 'utf8')
 const assertCode = require('../../remix-tests/sol/tests.sol') // eslint-disable-line @typescript-eslint/no-var-requires
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: Solidity runner reports assertions, reverts, calls, hooks, senders and fork-specific opcodes`, { timeout: 60_000 }, async () => {
     const engine = new Engine(fork, 1337)
     const local = new MonadProvider({ fork }, engine)

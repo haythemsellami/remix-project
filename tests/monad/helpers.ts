@@ -3,7 +3,7 @@ import solc from 'solc'
 import { routeScriptRunner } from './script-runner'
 
 const compiler = `soljson-v${solc.version().split('.Emscripten')[0]}.js`
-type Fork = 'monad-next' | 'monad-ten' | 'osaka'
+type Fork = 'monad-eight' | 'monad-nine' | 'monad-next' | 'monad-ten' | 'osaka'
 
 export const test = base.extend<{ diagnostics: void; ide: void; contractFile: string; scriptRunner: boolean }>({
   contractFile: ['MonadDemo.sol', { option: true }],
