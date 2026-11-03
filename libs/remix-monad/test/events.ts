@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, Contract, Interface, toBeHex, toQuantity, ZeroAddress, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 import { RpcError } from '../src/types'
 
@@ -20,7 +20,7 @@ const upper = (value: string) => '0x' + value.slice(2).toUpperCase()
 const invalid = (error: any) => error instanceof RpcError && error.code === -32602
 const missing = (error: any) => error instanceof RpcError && error.code === -32000 && /Filter not found/.test(error.message)
 
-async function fixture(fork: 'monad-ten' | 'monad-next', stateDb?: unknown) {
+async function fixture(fork: MonadSpec, stateDb?: unknown) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork, stateDb }, engine)
   try { await local.init() } catch (error) { engine.free(); throw error }
@@ -48,7 +48,7 @@ async function until(predicate: () => boolean, message: string) {
   assert.ok(predicate(), message)
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: event queries match block references, addresses, topics and anonymous events`, async () => {
     const f = await fixture(fork)
     try {

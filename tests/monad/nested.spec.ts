@@ -29,7 +29,7 @@ async function decodedValue(page: Page, value: number) {
   await expect(state.locator('[data-id="value-json-nested"] [data-id="value-json-value"]')).toHaveText(`"${value}"`)
 }
 
-for (const fork of ['monad-next', 'monad-ten', 'osaka'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-next', 'monad-ten', 'osaka'] as const) {
   test(`${fork}: navigate nested calls, delegate storage and caught reverts`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page, 'NestedCalls')
