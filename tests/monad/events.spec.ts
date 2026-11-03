@@ -27,9 +27,12 @@ async function selectSavedOrLocal(page: Page, category: string, name: string) {
       await page.locator(`[data-id="dropdown-item-${category.replace(/ /g, '_')}"]`).click()
       await expect(selector).toContainText(category)
     }
-    await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
-    await page.locator(`[data-id="dropdown-item-${name}"]`).click()
-    await expect(page.locator(`[data-id="selected-provider-${name}"]`)).toBeVisible()
+    const selected = page.locator(`[data-id="selected-provider-${name}"]`)
+    if (!await selected.isVisible()) {
+      await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
+      await page.locator(`[data-id="dropdown-item-${name}"]`).click()
+    }
+    await expect(selected).toBeVisible()
   })
 }
 
@@ -89,12 +92,12 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await expect(page.locator(`[data-id="selected-provider-vm-fs-${snapshotName}"]`)).toBeVisible()
     })
     await expect(page.locator('[data-id="forkInput"]')).not.toBeVisible()
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
     await page.locator('[data-id="delete-state-icon"]').click()
     await page.locator('[data-id="btnResetState"]').click()
     await expect(page.getByText('VM state reset successfully.', { exact: true })).toBeVisible()
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${fork === 'monad-ten' ? 'monad-next' : 'monad-ten'}`)
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${fork === 'monad-ten' ? 'monad-next' : 'monad-ten'}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
     expect(await rpc(page, 'eth_getLogs', query)).toEqual([])
     expect(await rpc(page, 'eth_uninstallFilter', filter)).toBe(false)
     await selectSavedOrLocal(page, 'Forked State', `vm-fs-${snapshotName}`)

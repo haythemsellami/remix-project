@@ -2,7 +2,7 @@
 
 Compile [HistoricalCalls.sol](../examples/HistoricalCalls.sol), then run
 [historical-calls.js](../examples/historical-calls.js) with Remix's Ethers v6 runner
-on Monad Ten or Monad Next. The script stores `1` and then `2`, simulates a write
+with **Monad VM** and either **Monad Ten** or **Monad Next (experimental)** selected in **Deploy & Run**. The script stores `1` and then `2`, simulates a write
 against the earlier block, and prints successful and reverted call hashes for
 the debugger. The live value stays `2`.
 

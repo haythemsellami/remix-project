@@ -1,6 +1,6 @@
 # Solidity tests and console output
 
-Select Monad Next or Monad Ten in Deploy & Run, then open the Solidity Unit Testing plugin. It uses the selected VM provider for deployment, hooks, test transactions and read-only calls. Debug buttons on test results open the corresponding recorded execution, including assertion failures and reverted transactions.
+In **Deploy & Run**, select **Monad VM**, then **Monad Next (experimental)** or **Monad Ten**. Open the Solidity Unit Testing plugin. It uses the selected VM provider for deployment, hooks, test transactions and read-only calls. Debug buttons on test results open the corresponding recorded execution, including assertion failures and reverted transactions.
 
 The [MonadUnit_test.sol](../examples/MonadUnit_test.sol) fixture covers setup hooks, assertions, transaction reverts, boolean read-only tests, and sender/value annotations. It deliberately includes failures: Monad Next reports four passes and three failures; Monad Ten reports three passes and four failures because its fork rejects the fixture's Monad extension. Compile for Cancun with Solidity 0.8.24 or newer.
 

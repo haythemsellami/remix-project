@@ -1,7 +1,7 @@
 # Events and polling filters
 
-Compile [EventQueries.sol](../examples/EventQueries.sol), select either local Monad
-fork, and run [event-listeners.js](../examples/event-listeners.js) with Ethers v6.
+Compile [EventQueries.sol](../examples/EventQueries.sol), select **Monad VM** and either Monad
+hardfork in **Deploy & Run**, and run [event-listeners.js](../examples/event-listeners.js) with Ethers v6.
 The script listens with `on` and `once`, decodes indexed arguments, removes its
 listener with `off`, and queries earlier events with `queryFilter`. It also checks
 that reverted transactions and simulated calls do not publish events.
