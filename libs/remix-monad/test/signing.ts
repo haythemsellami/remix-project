@@ -19,7 +19,7 @@ const message = {
 }
 const payload = () => TypedDataEncoder.getPayload(domain, types, message)
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: EIP-712 accepts Remix objects, ethers JSON and the v4 alias without changing state`, async () => {
     const engine = new Engine(fork, 1337)
     const local = new MonadProvider({ fork }, engine)

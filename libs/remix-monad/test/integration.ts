@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, ContractFactory, getBytes, hexlify, Wallet, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise debugger internals without exposing them as production package exports. */
 import { extendProvider } from '../../remix-debug/src/init'
@@ -22,7 +22,7 @@ const compiled = JSON.parse(solc.compile(JSON.stringify({
 assert.deepEqual((compiled.errors || []).filter(error => error.severity === 'error'), [])
 const artifact = compiled.contracts['MonadDemo.sol'].MonadDemo
 
-async function provider(fork: 'monad-next' | 'monad-ten' = 'monad-next', stateDb?: any) {
+async function provider(fork: MonadSpec = 'monad-next', stateDb?: any) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork, stateDb }, engine)
   await local.init()
@@ -167,22 +167,23 @@ test('Monad Ten rejects extension execution and has separate decoder behavior', 
   assert.equal(updateSymbolicStack(stack, 'MSTORE', 3).length, 0)
 })
 
-test('supported Monad forks use the Osaka opcode baseline in both decoders', () => {
+test('Monad Nine, Ten and Next use the Osaka opcode baseline in both decoders', () => {
   const raw = getBytes('0x1e5f5500')
   const expected = ['CLZ', 'PUSH0', 'SSTORE', 'STOP']
-  for (const hardfork of ['monad-ten', 'monad-next', 'osaka']) {
+  for (const hardfork of ['monad-nine', 'monad-ten', 'monad-next', 'osaka']) {
     const [names] = nameOpCodes(raw, hardfork)
     assert.deepEqual((names as string[]).map(instruction => instruction.trim().split(' ')[1]), expected, hardfork)
     assert.deepEqual(parseCode(raw, hardfork).map(opcode => opcode.name), expected, hardfork)
   }
 })
 
-test('Ethereum opcode availability follows the requested hardfork in both decoders', () => {
+test('Prague and earlier opcode availability follows the requested hardfork in both decoders', () => {
   const raw = getBytes('0x1e5f5e00')
   const cases = [
     { hardfork: 'london', expected: ['INVALID', 'INVALID', 'INVALID', 'STOP']},
     { hardfork: 'shanghai', expected: ['INVALID', 'PUSH0', 'INVALID', 'STOP']},
     { hardfork: 'cancun', expected: ['INVALID', 'PUSH0', 'MCOPY', 'STOP']},
+    { hardfork: 'monad-eight', expected: ['INVALID', 'PUSH0', 'MCOPY', 'STOP']},
     { hardfork: 'prague', expected: ['INVALID', 'PUSH0', 'MCOPY', 'STOP']}
   ]
   for (const { hardfork, expected } of cases) {
@@ -194,7 +195,7 @@ test('Ethereum opcode availability follows the requested hardfork in both decode
 
 test('unsupported hardfork names are rejected by both opcode decoders', () => {
   const raw = getBytes('0x1e00')
-  for (const hardfork of ['monad-eight', 'monad-nine', 'monad-future', 'monad-next-typo', 'unknown']) {
+  for (const hardfork of ['monad-seven', 'monad-future', 'monad-next-typo', 'unknown']) {
     for (const decode of [nameOpCodes, parseCode]) {
       assert.throws(() => decode(raw, hardfork), /Hardfork with name .* not supported/, `${decode.name}: ${hardfork}`)
     }
@@ -233,3 +234,27 @@ test('large traces fail explicitly without affecting transaction completion', as
     await assert.rejects(local.request({ method: 'debug_traceTransaction', params: [hash]}), /Trace exceeded/)
   } finally { web3.destroy(); engine.free() }
 })
+
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
+  test(`${fork}: debugger preserves fork, code and CLZ activation after restoration`, async () => {
+    const f = await provider(fork)
+    try {
+      const address = await deploy(f.local, f.from, '60011e5f5260205ff3')
+      const hash = await f.local.request({ method: 'eth_sendTransaction', params: [{ from: f.from, to: address, gas: '0xf4240' }]})
+      const receipt = await f.local.request({ method: 'eth_getTransactionReceipt', params: [hash]})
+      assert.equal(receipt.status, fork === 'monad-eight' ? '0x0' : '0x1')
+      const saved = await f.local.request({ method: 'eth_getStateDb' })
+      const restored = await provider(fork, saved)
+      try {
+        const debug = new Ethdebugger({ web3: restored.web3, compilationResult: async () => null })
+        await debug.debug((await restored.web3.getTransaction(hash)).toJSON())
+        assert.equal(debug.traceManager.getCurrentFork(), fork)
+        assert.equal(debug.traceManager.monadCodeByAddress[address.toLowerCase()], '0x60011e5f5260205ff3')
+        assert.equal(debug.getTrace()[1].pc, 2)
+        assert.equal(debug.getTrace()[1].op, fork === 'monad-eight' ? 'INVALID' : 'CLZ')
+        const trace = await restored.local.request({ method: 'debug_traceTransaction', params: [hash]})
+        if (fork !== 'monad-eight') assert.equal(BigInt(trace.returnValue), 255n)
+      } finally { restored.web3.destroy(); restored.engine.free() }
+    } finally { f.web3.destroy(); f.engine.free() }
+  })
+}

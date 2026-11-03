@@ -1,4 +1,5 @@
 'use strict'
+import { isMonadFork } from '../code/monadOpcodes'
 import { Hardfork } from '@ethereumjs/common'
 import { util, execution } from '@remix-project/remix-lib'
 const { toHexPaddedString } = util
@@ -41,7 +42,7 @@ export class TraceManager {
     if (!this.web3) throw new Error('web3 not loaded')
     this.isLoading = true
     const result = await this.getTrace(tx.hash)
-    if (result.fork === 'monad-ten' || result.fork === 'monad-next') {
+    if (isMonadFork(result.fork)) {
       this.monadCodeByAddress = result.codeByAddress || {}
     }
     try {
@@ -51,7 +52,7 @@ export class TraceManager {
         try {
           // A local VM's development chain ID and block height cannot identify its configured fork.
           const traceFork = result.fork
-          this.fork = traceFork === 'monad-ten' || traceFork === 'monad-next' || Object.values(Hardfork).includes(traceFork as Hardfork)
+          this.fork = isMonadFork(traceFork) || Object.values(Hardfork).includes(traceFork as Hardfork)
             ? traceFork : execution.forkAt((await this.web3.getNetwork()).chainId, tx.blockNumber)
         } catch (e) {
           this.fork = 'osaka'

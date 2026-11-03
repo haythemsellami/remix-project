@@ -44,7 +44,7 @@ async function debugHash(page: Page, hash: string, status = 'Success') {
   await expect(page.locator('[data-id="btnStepBack"]')).toBeEnabled()
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: authorize, execute, revoke and debug through the delegation UI`, async ({ page }) => {
     await selectEnvironment(page, fork)
     await deploy(page, 'DelegatedAccount')

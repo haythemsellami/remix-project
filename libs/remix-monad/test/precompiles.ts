@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { AbiCoder, BrowserProvider, Contract, toBeHex, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise the IDE debugger with real precompile traces. */
 import { extendProvider } from '../../remix-debug/src/init'
@@ -24,7 +24,7 @@ assert.deepEqual((compiled.errors || []).filter(error => error.severity === 'err
 const abi = AbiCoder.defaultAbiCoder()
 const hexWord = (value: string) => BigInt('0x' + value)
 
-async function fixture(fork: 'monad-ten' | 'monad-next') {
+async function fixture(fork: MonadSpec) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork }, engine)
   await local.init()
@@ -66,11 +66,12 @@ async function slot(debug: Ethdebugger, index: number, address: string) {
   })
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: precompile outputs, gas and source debugging survive the provider bridge`, { timeout: 30_000 }, async () => {
     const f = await fixture(fork)
     try {
-      for (const vector of vectors) {
+      for (const fixture of vectors) {
+        const vector = { ...fixture, ...fixture.forks?.[fork] }
         const target = toBeHex(vector.address, 20)
         const args = [target, vector.input, vector.gas]
         const before = f.engine.snapshot()

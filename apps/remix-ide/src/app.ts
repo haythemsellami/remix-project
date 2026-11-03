@@ -460,6 +460,8 @@ class AppComponent {
     const vmProviderCancun = new CancunVMProvider(blockchain)
     const vmProviderPectra = new PectraVMProvider(blockchain)
     const vmProviderFusaka = new FusakaVMProvider(blockchain)
+    const vmProviderMonadEight = new MonadVMProvider(blockchain, 'monad-eight')
+    const vmProviderMonadNine = new MonadVMProvider(blockchain, 'monad-nine')
     const vmProviderMonadTen = new MonadVMProvider(blockchain, 'monad-ten')
     const vmProviderMonadNext = new MonadVMProvider(blockchain, 'monad-next')
     const vmProviderMerge = new MergeVMProvider(blockchain)
@@ -564,6 +566,8 @@ class AppComponent {
       vmProviderCancun,
       vmProviderPectra,
       vmProviderFusaka,
+      vmProviderMonadEight,
+      vmProviderMonadNine,
       vmProviderMonadTen,
       vmProviderMonadNext,
       vmProviderMerge,

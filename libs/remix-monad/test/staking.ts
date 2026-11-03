@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, Contract, Interface, concat, getAddress, parseEther, toBeHex, toQuantity, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise the IDE debugger with real staking calls. */
 import { extendProvider } from '../../remix-debug/src/init'
@@ -34,7 +34,7 @@ const abi = new Interface([
   'event Withdraw(uint64 indexed validatorId,address indexed delegator,uint8 withdrawId,uint256 amount,uint64 epoch)'
 ])
 
-async function provider(fork: 'monad-ten' | 'monad-next', stateDb?: unknown) {
+async function provider(fork: MonadSpec, stateDb?: unknown) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork, stateDb }, engine)
   await local.init()
@@ -65,7 +65,7 @@ async function provider(fork: 'monad-ten' | 'monad-next', stateDb?: unknown) {
     close: () => { web3.destroy(); engine.free() } }
 }
 
-async function fixture(fork: 'monad-ten' | 'monad-next') {
+async function fixture(fork: MonadSpec) {
   const f = await provider(fork)
   await f.request('monad_setBalance', f.from, toQuantity(funded))
   assert.equal(BigInt(await f.request('eth_getBalance', f.from, '0x0')), funded)
@@ -106,7 +106,7 @@ async function inspect(f: Awaited<ReturnType<typeof provider>>, hash: string, ad
   assert.equal(BigInt(decoded.value.value), after)
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: staking rewards, withdrawal, historical blocks and restored debugging`, { timeout: 60_000 }, async () => {
     const f = await fixture(fork)
     let restored: Awaited<ReturnType<typeof provider>>

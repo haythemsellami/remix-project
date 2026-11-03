@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { AbiCoder, BrowserProvider, Contract, ContractFactory, Interface, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Verify the provider against the debugger's public trace and storage APIs. */
 import { extendProvider } from '../../remix-debug/src/init'
@@ -23,7 +23,7 @@ const artifacts = compiled.contracts['NestedCalls.sol']
 const abi = AbiCoder.defaultAbiCoder()
 const fault = new Interface(['error NestedFailure(uint256 value)']).encodeErrorResult('NestedFailure', [20])
 
-async function fixture(fork: 'monad-next' | 'monad-ten' = 'monad-next') {
+async function fixture(fork: MonadSpec = 'monad-next') {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork }, engine)
   await local.init()
@@ -191,10 +191,10 @@ test('propagated reverts retain error data and roll back storage and logs', asyn
 })
 
 test('caught out-of-gas and invalid extensions keep the parent trace usable', async () => {
-  for (const fork of ['monad-next', 'monad-ten'] as const) {
+  for (const fork of ['monad-eight', 'monad-nine', 'monad-next', 'monad-ten'] as const) {
     const f = await fixture(fork)
     try {
-      for (const runtime of ['5b5f56', 'ae02', 'ae', ...(fork === 'monad-ten' ? ['ae005f5260205ff3', '5fae015f5260205ff3'] : [])]) {
+      for (const runtime of ['5b5f56', 'ae02', 'ae', ...(fork !== 'monad-next' ? ['ae005f5260205ff3', '5fae015f5260205ff3'] : [])]) {
         const len = (runtime.length / 2).toString(16).padStart(2, '0')
         const hash = await f.local.request({ method: 'eth_sendTransaction', params: [{ from: f.from, gas: '0xf4240', data: `0x60${len}600c60003960${len}6000f3${runtime}` }]})
         const { contractAddress } = await f.local.request({ method: 'eth_getTransactionReceipt', params: [hash]})

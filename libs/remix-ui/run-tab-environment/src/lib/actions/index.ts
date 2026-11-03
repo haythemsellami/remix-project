@@ -1,3 +1,4 @@
+import { isMonadSpec } from '@remix-project/remix-monad'
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import React from "react"
 import { Plugin } from "@remixproject/engine"
@@ -202,7 +203,7 @@ export async function getAccountsList (plugin: EnvironmentPlugin, dispatch: Reac
 
 export async function loadAllDelegations (plugin: EnvironmentPlugin, accounts: Account[], currentProvider: string, dispatch: React.Dispatch<Actions>) {
   // Only load delegations for EIP-7702 compatible environments
-  const monad = ['monad-ten', 'monad-next'].includes(await plugin.call('blockchain', 'getCurrentFork'))
+  const monad = isMonadSpec(await plugin.call('blockchain', 'getCurrentFork'))
   if (!monad && currentProvider !== 'vm-prague' && currentProvider !== 'vm-osaka' && !currentProvider.includes('mainnet-fork')) {
     return
   }

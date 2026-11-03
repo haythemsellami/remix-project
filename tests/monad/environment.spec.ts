@@ -17,11 +17,11 @@ test('VM categories show only their own hardforks and select the matching engine
   await expect(options).toHaveText(ethereumForks)
   await hardfork.click()
 
-  for (const fork of ['monad-ten', 'monad-next'] as const) {
+  for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
     await chooseEnvironment(page, fork)
     await expect(category).toHaveText('Monad VM')
     await hardfork.click()
-    await expect(options).toHaveText(['Monad Ten', 'Monad Next (experimental)'])
+    await expect(options).toHaveText(['Monad Ten', 'Monad Nine', 'Monad Eight', 'Monad Next (experimental)'])
     await hardfork.click()
   }
 

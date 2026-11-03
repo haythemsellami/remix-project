@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { AbiCoder, BrowserProvider, Contract, getAddress, getCreateAddress, getCreate2Address, keccak256, toBeHex, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise the same library linker and debugger used by the IDE. */
 import { linkBytecode } from '../../remix-lib/src/execution/txFormat'
@@ -25,7 +25,7 @@ const abi = AbiCoder.defaultAbiCoder()
 const salt = toBeHex(123, 32)
 const flatten = scopes => scopes.flatMap(scope => [scope, ...flatten(scope.children)])
 
-async function fixture(fork: 'monad-next' | 'monad-ten') {
+async function fixture(fork: MonadSpec) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork }, engine)
   await local.init()
@@ -82,7 +82,7 @@ async function slot(debug: Ethdebugger, index: number, address: string) {
   })
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   for (const opcode of ['CREATE', 'CREATE2']) {
     test(`${fork}: ${opcode} links libraries and preserves child constructor source, state and value`, { timeout: 20_000 }, async () => {
       const f = await fixture(fork)

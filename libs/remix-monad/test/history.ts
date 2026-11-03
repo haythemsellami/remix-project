@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, Interface, Wallet, hexlify, parseEther, toQuantity, ZeroAddress, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 import { RpcError } from '../src/types'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Validate historical calls with the IDE debugger. */
@@ -23,7 +23,7 @@ assert.deepEqual((compiled.errors || []).filter(error => error.severity === 'err
 const artifact = compiled.contracts[file].HistoricalCalls
 const abi = new Interface(artifact.abi)
 
-async function fixture(fork: 'monad-ten' | 'monad-next', stateDb?: unknown) {
+async function fixture(fork: MonadSpec, stateDb?: unknown) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork, stateDb }, engine)
   try { await local.init() } catch (error) { engine.free(); throw error }
@@ -77,7 +77,7 @@ async function inspect(f: Awaited<ReturnType<typeof fixture>>, hash: string, bef
   assert.equal(await value(steps.length - 1), after)
 }
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: calls and estimates use the selected state, timestamp and block hashes`, async context => {
     let now = 1_800_000_000_000
     context.mock.method(Date, 'now', () => now)

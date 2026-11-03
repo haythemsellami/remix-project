@@ -31,6 +31,13 @@ export interface RecordedStakingTransition {
   after: string
 }
 
+const SNAPSHOT_SPECS: Record<MonadSpec, string> = {
+  'monad-eight': 'MonadEight',
+  'monad-nine': 'MonadNine',
+  'monad-ten': 'MonadTen',
+  'monad-next': 'MonadNext'
+}
+
 const object = (value: any) => value !== null && typeof value === 'object' && !Array.isArray(value)
 const hex = (value: any) => typeof value === 'string' && /^0x(?:[\da-f]{2})*$/i.test(value)
 const hash = (value: any) => typeof value === 'string' && /^0x[\da-f]{64}$/i.test(value)
@@ -65,7 +72,7 @@ function snapshot(value: any, spec: MonadSpec) {
   if (typeof value !== 'string') invalid('missing engine snapshot')
   let parsed
   try { parsed = JSON.parse(value) } catch { invalid('malformed engine snapshot JSON') }
-  if (!object(parsed) || parsed.version !== 1 || parsed.chainId !== 1337 || parsed.spec !== (spec === 'monad-next' ? 'MonadNext' : 'MonadTen')) {
+  if (!object(parsed) || parsed.version !== 1 || parsed.chainId !== 1337 || parsed.spec !== SNAPSHOT_SPECS[spec]) {
     invalid('incompatible engine snapshot version, specification or chain ID')
   }
   if (!object(parsed.accounts) || !object(parsed.blockHashes)) invalid('malformed engine snapshot accounts or block hashes')

@@ -20,7 +20,7 @@ test('console decoding supports current and legacy signatures and ignores malfor
   ]), [[], ['message', '42', true, address], ['-7'], ['0xabcdef'], [ZeroHash], ['99'], ['-9']])
 })
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: transaction, call and reverted console output survives save and restore`, async () => {
     const engine = new Engine(fork, 1337)
     const restoredEngine = new Engine(fork, 1337)

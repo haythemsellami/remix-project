@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import solc from 'solc'
 import { BrowserProvider, Interface, Transaction, Wallet, concat, decodeRlp, encodeRlp, hexlify, keccak256, parseEther, toBeArray, toQuantity, ZeroAddress, ZeroHash } from 'ethers'
-import init, { Engine } from 'monad-revmjs'
+import init, { Engine, type MonadSpec } from 'monad-revmjs'
 import { MonadProvider } from '../src/provider'
 /* eslint-disable @nrwl/nx/enforce-module-boundaries -- Exercise delegated execution through the IDE debugger. */
 import { extendProvider, getTransactionForDebugging } from '../../remix-debug/src/init'
@@ -22,7 +22,7 @@ assert.deepEqual((compiled.errors || []).filter(error => error.severity === 'err
 const artifact = compiled.contracts[file].DelegatedAccount
 const abi = new Interface(artifact.abi)
 
-async function fixture(fork: 'monad-ten' | 'monad-next', stateDb?: any) {
+async function fixture(fork: MonadSpec, stateDb?: any) {
   const engine = new Engine(fork, 1337)
   const local = new MonadProvider({ fork, stateDb }, engine)
   await local.init()
@@ -81,7 +81,7 @@ test('the Monad debugger transaction fallback preserves errors from other provid
   await assert.rejects(getTransactionForDebugging(provider, ZeroHash), caught => caught === error)
 })
 
-for (const fork of ['monad-ten', 'monad-next'] as const) {
+for (const fork of ['monad-eight', 'monad-nine', 'monad-ten', 'monad-next'] as const) {
   test(`${fork}: invalid authorization signatures are skipped without rejecting signed or unlocked transactions`, async () => {
     const f = await fixture(fork)
     try {
