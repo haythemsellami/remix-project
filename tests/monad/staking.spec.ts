@@ -29,9 +29,12 @@ async function selectSavedOrLocal(page: Page, category: string, name: string) {
       await page.locator(`[data-id="dropdown-item-${category.replace(/ /g, '_')}"]`).click()
       await expect(selector).toContainText(category)
     }
-    await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
-    await page.locator(`[data-id="dropdown-item-${name}"]`).click()
-    await expect(page.locator(`[data-id="selected-provider-${name}"]`)).toBeVisible()
+    const selected = page.locator(`[data-id="selected-provider-${name}"]`)
+    if (!await selected.isVisible()) {
+      await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
+      await page.locator(`[data-id="dropdown-item-${name}"]`).click()
+    }
+    await expect(selected).toBeVisible()
   })
 }
 
@@ -99,13 +102,13 @@ for (const fork of ['monad-ten', 'monad-next'] as const) {
       await page.locator('[data-id="btnForkState"]').click()
       await expect(page.locator(`[data-id="selected-provider-vm-fs-${snapshotName}"]`)).toBeVisible()
     })
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
     await page.locator('[data-id="delete-state-icon"]').click()
     await page.locator('[data-id="btnResetState"]').click()
     await expect(page.getByText('VM state reset successfully.', { exact: true })).toBeVisible()
     const other = fork === 'monad-next' ? 'monad-ten' : 'monad-next'
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${other}`)
-    await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${other}`)
+    await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
     expect((await rpc(page, 'eth_getStateDb')).stakingTransitions).toEqual([])
     expect(await rpc(page, 'eth_getBalance', staking)).toBe('0x0')
     await selectSavedOrLocal(page, 'Forked State', `vm-fs-${snapshotName}`)

@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { waitForIde, deploy, openContract, transact, showOpcodes, seekOpcode, step } from './helpers'
+import { waitForIde, selectEnvironment, deploy, openContract, transact, showOpcodes, seekOpcode, step } from './helpers'
 
 export type Fork = 'monad-ten' | 'monad-next' | 'osaka'
 const source = readFileSync('libs/remix-monad/examples/MonadDemo.sol', 'utf8')
@@ -26,11 +26,7 @@ export async function changeProvider(page: Page, action: () => Promise<void>) {
 export async function chooseEnvironment(page: Page, fork: Fork) {
   await showDeploy(page)
   if (!await page.locator(`[data-id="selected-provider-vm-${fork}"]`).isVisible()) {
-    await changeProvider(page, async () => {
-      await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
-      await page.locator(`[data-id="dropdown-item-vm-${fork}"]`).click()
-      await expect(page.locator(`[data-id="selected-provider-vm-${fork}"]`)).toBeVisible()
-    })
+    await changeProvider(page, () => selectEnvironment(page, fork))
   }
   await page.waitForFunction(() => !!(window as any).__remixVM_web3)
   await expect(page.locator('[data-id="runTabSelectAccount"]')).toContainText(fork === 'osaka' ? 'ETH' : 'MON')

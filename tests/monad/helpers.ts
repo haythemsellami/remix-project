@@ -69,10 +69,20 @@ export async function waitForIde(page: Page) {
 }
 
 export async function selectEnvironment(page: Page, fork: Fork) {
-  await page.locator('#icon-panel div[plugin="udapp"]').click()
-  await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
-  await page.locator(`[data-id="dropdown-item-vm-${fork}"]`).click()
-  await expect(page.locator(`[data-id="selected-provider-vm-${fork}"]`)).toBeVisible()
+  const selector = page.locator('[data-id="settingsSelectEnvOptions"]')
+  if (!await selector.isVisible()) await page.locator('#icon-panel div[plugin="udapp"]').click()
+  const category = fork === 'osaka' ? 'Remix VM' : 'Monad VM'
+  if ((await selector.innerText()).trim() !== category) {
+    await selector.click()
+    await page.locator(`[data-id="dropdown-item-${category.replace(/ /g, '_')}"]`).click()
+    await expect(selector).toHaveText(category)
+  }
+  const selected = page.locator(`[data-id="selected-provider-vm-${fork}"]`)
+  if (!await selected.isVisible()) {
+    await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
+    await page.locator(`[data-id="dropdown-item-vm-${fork}"]`).click()
+  }
+  await expect(selected).toBeVisible()
   await expect(page.locator('[data-id="runTabSelectAccount"]')).toContainText(fork === 'osaka' ? 'ETH' : 'MON', { timeout: 60_000 })
 }
 

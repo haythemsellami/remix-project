@@ -25,9 +25,12 @@ async function selectSavedOrLocal(page: Page, category: string, name: string) {
       await page.locator(`[data-id="dropdown-item-${category.replace(/ /g, '_')}"]`).click()
       await expect(selector).toContainText(category)
     }
-    await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
-    await page.locator(`[data-id="dropdown-item-${name}"]`).click()
-    await expect(page.locator(`[data-id="selected-provider-${name}"]`)).toBeVisible()
+    const selected = page.locator(`[data-id="selected-provider-${name}"]`)
+    if (!await selected.isVisible()) {
+      await page.locator('[data-id="settingsSelectEnvCategoryOptions"]').click()
+      await page.locator(`[data-id="dropdown-item-${name}"]`).click()
+    }
+    await expect(selected).toBeVisible()
   })
 }
 
@@ -64,13 +67,13 @@ for (const fork of ['monad-next', 'monad-ten'] as const) {
     })
 
     await test.step('Reset the original environment and verify it stays empty when reopened', async () => {
-      await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+      await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
       await page.locator('[data-id="delete-state-icon"]').click()
       await page.locator('[data-id="btnResetState"]').click()
       await expect(page.getByText('VM state reset successfully.', { exact: true })).toBeVisible()
       const other = fork === 'monad-next' ? 'monad-ten' : 'monad-next'
-      await selectSavedOrLocal(page, 'Remix VM', `vm-${other}`)
-      await selectSavedOrLocal(page, 'Remix VM', `vm-${fork}`)
+      await selectSavedOrLocal(page, 'Monad VM', `vm-${other}`)
+      await selectSavedOrLocal(page, 'Monad VM', `vm-${fork}`)
       const reset = await rpc(page, 'eth_getStateDb')
       expect(reset.blocks).toHaveLength(1)
       expect(reset.executions).toEqual([])

@@ -2,7 +2,7 @@
 
 The Monad provider uses Remix's existing state saving, named state forks, and environment reset controls. Saved state includes local account keys, the engine snapshot, blocks, receipts, and full execution records with traces, hash preimages, and before/after snapshots.
 
-With **Save environment state** enabled, Remix writes `.states/vm-monad-ten/state.json` or `.states/vm-monad-next/state.json` in the current workspace. After a reload, select the same environment to restore it. Compile the saved source and use **Add Contract** with its address to resume interaction; saved transaction hashes can also be entered in the debugger. Polling filters belong to the previous worker session and must be recreated.
+With **Save environment state** enabled, Remix writes `.states/vm-monad-ten/state.json` or `.states/vm-monad-next/state.json` in the current workspace. After a reload, select **Monad VM** and the same hardfork to restore it. Compile the saved source and use **Add Contract** with its address to resume interaction; saved transaction hashes can also be entered in the debugger. Polling filters belong to the previous worker session and must be recreated.
 
 Disabling the setting leaves existing state files unchanged and starts a fresh VM on reload. Re-enabling it allows the last saved state to load again; transactions made while saving was disabled are absent from that file.
 

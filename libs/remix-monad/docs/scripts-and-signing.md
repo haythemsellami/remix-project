@@ -1,6 +1,6 @@
 # Scripts and signing
 
-Compile [MonadDemo.sol](../examples/MonadDemo.sol) for Cancun and select Monad Next or Monad Ten. Open [deploy-script.js](../examples/deploy-script.js) and choose **Run with Ethers v6** from the editor's run menu. It deploys the contract, writes storage, checks its event, and saves the address in `monad-script.json`.
+Compile [MonadDemo.sol](../examples/MonadDemo.sol) for Cancun. In **Deploy & Run**, select **Monad VM**, then **Monad Next (experimental)** or **Monad Ten**. Open [deploy-script.js](../examples/deploy-script.js) and choose **Run with Ethers v6** from the editor's run menu. It deploys the contract, writes storage, checks its event, and saves the address in `monad-script.json`.
 
 Next run [sign-and-execute.ts](../examples/sign-and-execute.ts) with Ethers v6. It signs EIP-712 data, verifies the signature through the VM's `ecrecover` precompile, saves `MonadTypedData.json`, and submits an opcode transaction. Monad Next succeeds and stores `1`; Monad Ten reverts and preserves `42`. Copy either script's transaction hash into the debugger to inspect the recorded execution.
 

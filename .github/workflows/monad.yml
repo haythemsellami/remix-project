@@ -60,7 +60,8 @@ jobs:
 
   browser:
     needs: build
-    runs-on: ubuntu-latest
+    # The pinned Playwright release supports Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false

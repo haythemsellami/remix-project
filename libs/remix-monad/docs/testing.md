@@ -1,6 +1,6 @@
 # Browser tests and CI
 
-The `Monad integration` GitHub Actions workflow runs on pull requests targeting `master` or `monad`, pushes to either branch, and manual dispatch. It tests the installed `monad-revmjs` package through the provider, checks types, runs the full shared debugger suite, and builds Remix once. Four Chromium jobs download that build and split all browser scenarios between them, with one worker per job. The final `integration` check requires the build and every shard to pass. The standard `test:libs` command also includes `remix-monad`.
+The `Monad integration` GitHub Actions workflow runs on pull requests targeting `master` or `monad`, pushes to either branch, and manual dispatch. It tests the installed `monad-revmjs` package through the provider, checks types, runs the full shared debugger suite, and builds Remix once. Four Chromium jobs use Ubuntu 24.04, download that build and split all browser scenarios between them, with one worker per job. The final `integration` check requires the build and every shard to pass. The standard `test:libs` command also includes `remix-monad`.
 
 Use the Node version in `.nvmrc` and install with `yarn install --frozen-lockfile`. From the repository root:
 
@@ -22,6 +22,8 @@ The dedicated Playwright configuration starts a fresh server on `127.0.0.1:8090`
 [EventQueries.sol](../examples/EventQueries.sol) and [event-listeners.js](../examples/event-listeners.js) exercise indexed event queries, `on`/`once`/`off` listeners and polling filters. Provider tests cover query validation, wildcard matching, ordered incremental delivery, anonymous events, empty blocks, simulation/revert isolation and session invalidation. Browser scenarios on both forks restore saved logs, debug successful and reverted `LOG3` instructions with source and decoded storage, then continue polling with a new filter. See [events and polling filters](events.md).
 
 Workspace scenarios deploy the same contract address with different storage in two workspaces, switch between them and reload the browser. Both Monad forks must restore their own balances, nonces, receipts, event logs and traces, invalidate old polling filters and debug each workspace's saved write. An Ethereum Osaka regression also checks that a new workspace gets a fresh VM and that switching back restores its saved bytecode and account nonce.
+
+The environment picker regression verifies that **Monad VM** offers only **Monad Ten** and **Monad Next (experimental)**, that **Remix VM** offers Ethereum hardforks, and that switching between them selects the matching engine. Browser helpers select the category before the hardfork, including after reload and when returning from a saved state.
 
 All three environments (Monad Next, Monad Ten, and Ethereum Osaka) exercise deployment, constructor stepping, storage reads and writes, source highlighting, and decoded Solidity state. Monad Next also executes `CALLSTACKDEPTH` through a nested `STATICCALL`, checks instruction PCs `0` and `2`, and verifies stack values while stepping backward and forward. Fork-specific opcode rejection is covered by the provider integration suite.
 

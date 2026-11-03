@@ -29,14 +29,14 @@ For engine changes, build and test `crates/monad-revmjs` in the engine repositor
 
 1. Open the local Remix server, normally `http://localhost:8080`.
 2. Copy [MonadDemo.sol](examples/MonadDemo.sol) into the Remix workspace. Compile it with Solidity 0.8.24 or newer, targeting Cancun.
-3. In **Deploy & Run**, select **Monad Next (experimental)** and the **MonadDemo** contract, then deploy it.
+3. In **Deploy & Run**, select **Monad VM** in the environment dropdown, then **Monad Next (experimental)** in the hardfork dropdown beside it. Select the **MonadDemo** contract and deploy it.
 4. Call `store(42)`. Read `value()` to confirm `42`. Use the transaction's **Debug** button to step through the Solidity storage assignment and inspect stack, memory and storage.
 5. Call `recordDepth()`. Read `value()` again; it should be `1`. Debug this transaction, select the `recordDepth` call, open **Stack & Memory**, and expand **opcode** to enable instruction stepping. Select the nested `STATICCALL` in the execution trace and use **Step Into**. The oracle's first instruction is `CALLSTACKDEPTH` at PC `0`; the following `PUSH0` is at PC `2`.
 6. Use backward/forward navigation to inspect the recorded execution. The parent contract has Solidity source maps. The small oracle uses raw bytecode and is debugged at the instruction level.
 
 The constructor deploys an eight-byte oracle with runtime `ae005f5260205ff3`. `AE 00` is one extension instruction. It returns depth zero at the root of execution and one when called from `MonadDemo`. Solidity does not need to recognize a new builtin to deploy this bytecode.
 
-**Monad Ten** is also available. It executes ordinary Solidity contracts but rejects the extension when `recordDepth()` reaches the oracle. **Monad Next** enables `CALLSTACKDEPTH` and `CALLERN` according to the pinned engine revision; it is explicitly experimental.
+**Monad Ten** is also available under **Monad VM**. It executes ordinary Solidity contracts but rejects the extension when `recordDepth()` reaches the oracle. **Monad Next** enables `CALLSTACKDEPTH` and `CALLERN` according to the pinned engine revision; it is explicitly experimental. The menu lists the Ten and Next specifications exposed by the pinned `monad-revmjs` package. Exposing the Rust engine's earlier Eight and Nine hardforks requires WASM wrapper support and Remix validation.
 
 ## Execution and debugging boundary
 
