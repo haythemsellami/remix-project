@@ -176,7 +176,7 @@ export class Ethdebugger {
     if (!variable) return null
     const stack = this.traceManager.getStackAt(step)
     const memory = this.traceManager.getMemoryAt(step)
-    const address = this.traceManager.getCurrentCalledAddressAt(step)
+    const address = this.traceManager.getCurrentStorageAddressAt(step)
     const calldata = this.traceManager.getCallDataAt(step)
     const storageViewer = new StorageViewer({ stepIndex: step, tx: this.tx, address: address }, this.storageResolver, this.traceManager)
     const currentStackIndex = findVariableStackPosition(this.callTree, step, variable)
@@ -214,7 +214,7 @@ export class Ethdebugger {
     try {
       const stack = this.traceManager.getStackAt(step)
       const memory = this.traceManager.getMemoryAt(step)
-      const address = this.traceManager.getCurrentCalledAddressAt(step)
+      const address = this.traceManager.getCurrentStorageAddressAt(step)
       const calldata = this.traceManager.getCallDataAt(step)
       try {
         const storageViewer = new StorageViewer({ stepIndex: step, tx: this.tx, address: address }, this.storageResolver, this.traceManager)
@@ -254,7 +254,7 @@ export class Ethdebugger {
   async decodeStateAt (step, stateVars, callback?) {
     try {
       callback = callback || (() => {})
-      const address = this.traceManager.getCurrentCalledAddressAt(step)
+      const address = this.traceManager.getCurrentStorageAddressAt(step)
       const storageViewer = new StorageViewer({ stepIndex: step, tx: this.tx, address: address }, this.storageResolver, this.traceManager)
       const result = await stateDecoder.decodeState(stateVars, storageViewer)
       callback(result)
@@ -315,6 +315,10 @@ export class Ethdebugger {
     this.tx = tx
 
     await this.traceManager.resolveTrace(tx)
+    if (this.codeManager.codeResolver.fork !== this.traceManager.getCurrentFork()) {
+      this.codeManager.clear()
+      this.codeManager.codeResolver.fork = this.traceManager.getCurrentFork()
+    }
     this.event.trigger('newTraceLoaded', [this.traceManager.trace])
     if (this.breakpointManager && this.breakpointManager.hasBreakpoint()) {
       this.breakpointManager.jumpNextBreakpoint(false, false)
