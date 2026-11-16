@@ -1,12 +1,21 @@
 import { Provider } from '@remix-project/remix-simulator'
+import { MonadProvider, isMonadSpec } from '@remix-project/remix-monad'
 
-let provider: Provider = null
+const rpcError = (error) => error ? {
+  message: error.message || String(error),
+  code: error.code || -32603,
+  data: error.data
+} : null
+
+let provider: Provider | MonadProvider = null
 self.onmessage = (e: MessageEvent) => {
   const data = e.data
   switch (data.cmd) {
   case 'init':
   {
-    provider = new Provider({ baseBlockNumber: data.baseBlockNumer, fork: data.fork, nodeUrl: data.nodeUrl, blockNumber: data.blockNumber, stateDb: data.stateDb, blocks: data.blocks })
+    provider = isMonadSpec(data.fork)
+      ? new MonadProvider({ fork: data.fork, stateDb: data.stateDb })
+      : new Provider({ baseBlockNumber: data.baseBlockNumer, fork: data.fork, nodeUrl: data.nodeUrl, blockNumber: data.blockNumber, stateDb: data.stateDb, blocks: data.blocks })
     provider.init().then(() => {
       self.postMessage({
         cmd: 'initiateResult',
@@ -15,7 +24,7 @@ self.onmessage = (e: MessageEvent) => {
     }).catch((error) => {
       self.postMessage({
         cmd: 'initiateResult',
-        error,
+        error: rpcError(error),
         stamp: data.stamp
       })
     })
@@ -27,7 +36,7 @@ self.onmessage = (e: MessageEvent) => {
       provider.sendAsync(data.query, (error, result) => {
         self.postMessage({
           cmd: 'sendAsyncResult',
-          error,
+          error: rpcError(error),
           result,
           stamp: data.stamp
         })
@@ -58,7 +67,7 @@ self.onmessage = (e: MessageEvent) => {
         }).catch((error) => {
           self.postMessage({
             cmd: 'requestResult',
-            error: error,
+            error: rpcError(error),
             result: null,
             stamp: stamp
           })

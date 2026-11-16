@@ -66,7 +66,7 @@ export function AccountUI(props: AccountProps) {
 
   useEffect(() => {
     const run = async () => {
-      if (selectExEnv !== 'vm-osaka' && selectExEnv !== 'vm-prague' && selectExEnv !== 'vm-mainnet-fork') {
+      if (!['vm-osaka', 'vm-prague', 'vm-mainnet-fork', 'vm-monad-eight', 'vm-monad-nine', 'vm-monad-ten', 'vm-monad-next'].includes(selectExEnv)) {
         setEnableDelegationAuthorization(false)
         setContractHasDelegation(false)
         delegationAuthorizationAddressRef.current = null
@@ -107,6 +107,10 @@ export function AccountUI(props: AccountProps) {
       })
     } else {
       switch (selectExEnv) {
+      case 'vm-monad-eight':
+      case 'vm-monad-nine':
+      case 'vm-monad-ten':
+      case 'vm-monad-next':
       case 'vm-osaka':
         setPlusOpt({
           classList: '',
